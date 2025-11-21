@@ -33,7 +33,7 @@ export const PreviewTable: React.FC<PreviewTableProps> = ({ data, columns }) => 
         </tbody>
       </table>
       <div className="p-4 text-center text-xs text-gray-400 bg-gray-50 border-t">
-        Mostrando primeras 5 filas como vista previa
+        Mostrando primeras {data.length} filas como vista previa
       </div>
     </div>
   );

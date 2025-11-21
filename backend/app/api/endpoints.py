@@ -14,7 +14,7 @@ async def list_files(session: Session = Depends(get_session)):
 
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...), session: Session = Depends(get_session)):
-    if not file.filename.endswith(('.csv', '.xlsx', '.xls')):
+    if not file.filename.lower().endswith(('.csv', '.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Formato de archivo no soportado. Use CSV o Excel.")
     
     try:

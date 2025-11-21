@@ -4,6 +4,7 @@ import { FileList } from './components/FileList'
 import { FileUploader } from './components/FileUploader'
 import { AlertConfig } from './components/AlertConfig'
 import { DashboardView } from './components/DashboardView'
+import { PreviewTable } from './components/PreviewTable'
 import { uploadFile, saveMapping, getFiles, getDashboard, saveAlerts, deleteFile, getFilePreview, UploadResponse, getDashboardPreview } from './services/api'
 import { LayoutDashboard, ArrowLeft, Settings, Edit, Check } from 'lucide-react'
 
@@ -204,18 +205,49 @@ function App() {
         )}
 
         {view === 'mapping' && currentFile && (
-          <div className="animate-in fade-in slide-in-from-bottom-4">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold mb-2">Diseña tu Dashboard</h2>
-              <p className="text-gray-500">Arrastra las columnas para crear tus gráficos y KPIs.</p>
+          <div className="animate-in fade-in slide-in-from-bottom-4 h-[calc(100vh-100px)] flex flex-col">
+            <div className="mb-4 flex justify-between items-center">
+                <div>
+                    <h2 className="text-2xl font-bold">Diseña tu Dashboard</h2>
+                    <p className="text-gray-500">Configura tus gráficos usando los datos de la derecha.</p>
+                </div>
+                <button 
+                    onClick={() => currentConfig && handleMappingConfirm(currentConfig)}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold flex items-center gap-2 shadow-sm"
+                >
+                    <Check className="w-5 h-5" />
+                    Generar Dashboard
+                </button>
             </div>
             
-            <DashboardBuilder 
-              columns={currentFile.columns} 
-              previewData={currentFile.preview}
-              onConfirm={handleMappingConfirm}
-              initialConfig={initialMapping}
-            />
+            <div className="flex gap-6 flex-1 overflow-hidden">
+                {/* Left Panel: Builder */}
+                <div className="w-1/3 min-w-[400px] bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden flex flex-col">
+                  <div className="p-4 border-b bg-gray-50">
+                    <h3 className="font-bold text-gray-700">Configuración</h3>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <DashboardBuilder 
+                        columns={currentFile.columns} 
+                        previewData={currentFile.preview}
+                        onConfirm={handleMappingConfirm}
+                        initialConfig={initialMapping}
+                        onChange={setCurrentConfig}
+                        compact={true}
+                    />
+                  </div>
+                </div>
+
+                {/* Right Panel: Data Preview */}
+                <div className="flex-1 overflow-hidden bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col">
+                  <div className="p-4 border-b bg-gray-50">
+                    <h3 className="font-bold text-gray-800">Vista Previa de Datos ({currentFile.filename})</h3>
+                  </div>
+                  <div className="flex-1 overflow-auto p-4">
+                    <PreviewTable data={currentFile.preview} columns={currentFile.columns} />
+                  </div>
+                </div>
+            </div>
           </div>
         )}
 

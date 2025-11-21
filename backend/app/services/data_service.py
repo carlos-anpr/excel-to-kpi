@@ -33,6 +33,35 @@ class DataService:
         return False
 
     @staticmethod
+    def _load_dataframe(file_path: str) -> pd.DataFrame:
+        """Helper to load DataFrame with robust error handling for CSVs."""
+        if file_path.lower().endswith(('.xls', '.xlsx')):
+            return pd.read_excel(file_path)
+            
+        # CSV Handling with fallbacks
+        encodings = ['utf-8', 'latin-1', 'cp1252']
+        separators = [',', ';', '\t']
+        
+        # Try combinations
+        for encoding in encodings:
+            for sep in separators:
+                try:
+                    # on_bad_lines='skip' ignores rows with too many fields
+                    df = pd.read_csv(file_path, encoding=encoding, sep=sep, on_bad_lines='skip')
+                    if len(df.columns) > 1: # Basic validation
+                        return df
+                except Exception:
+                    continue
+        
+        # If strict parsing fails, try one last time with default comma and latin-1 (common for Excel CSVs)
+        # allowing 1 column if that's all there is
+        try:
+            return pd.read_csv(file_path, encoding='latin-1', on_bad_lines='skip')
+        except Exception:
+            # Fallback to python engine
+            return pd.read_csv(file_path, sep=None, engine='python', encoding='latin-1', on_bad_lines='skip')
+
+    @staticmethod
     def get_preview(file_id: str) -> dict:
         """Lee el archivo guardado y devuelve una previsualización (primeras 5 filas)."""
         # Buscar el archivo con ese ID (puede ser .csv o .xlsx)
@@ -49,15 +78,12 @@ class DataService:
             raise FileNotFoundError("Archivo no encontrado")
 
         try:
-            if found_file.endswith(".csv"):
-                df = pd.read_csv(found_file)
-            else:
-                df = pd.read_excel(found_file)
+            df = DataService._load_dataframe(found_file)
             
             # Reemplazar NaN con None (null en JSON) para evitar errores en el frontend
             df = df.where(pd.notnull(df), None)
 
-            preview = df.head(5).to_dict(orient="records")
+            preview = df.head(20).to_dict(orient="records")
             columns = list(df.columns)
             
             return {
@@ -83,10 +109,7 @@ class DataService:
             raise FileNotFoundError("Archivo no encontrado")
 
         try:
-            if found_file.endswith(".csv"):
-                df = pd.read_csv(found_file)
-            else:
-                df = pd.read_excel(found_file)
+            df = DataService._load_dataframe(found_file)
             
             # Identificar si es configuración nueva (DashboardBuilder) o antigua (Mapeo simple)
             is_new_config = "charts" in mapping and isinstance(mapping["charts"], list)
