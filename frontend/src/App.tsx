@@ -4,8 +4,9 @@ import { PreviewTable } from './components/PreviewTable'
 import { ColumnMapper } from './components/ColumnMapper'
 import { DashboardView } from './components/DashboardView'
 import { FileList } from './components/FileList'
-import { uploadFile, saveMapping, getFiles, getDashboard, UploadResponse } from './services/api'
-import { LayoutDashboard, ArrowLeft } from 'lucide-react'
+import { AlertConfig } from './components/AlertConfig'
+import { uploadFile, saveMapping, getFiles, getDashboard, saveAlerts, UploadResponse } from './services/api'
+import { LayoutDashboard, ArrowLeft, Settings } from 'lucide-react'
 
 type ViewState = 'list' | 'upload' | 'mapping' | 'dashboard';
 
@@ -14,6 +15,8 @@ function App() {
   const [files, setFiles] = useState<any[]>([]);
   const [currentFile, setCurrentFile] = useState<UploadResponse | null>(null);
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const [currentFileId, setCurrentFileId] = useState<string | null>(null);
+  const [showConfig, setShowConfig] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +42,7 @@ function App() {
     try {
       const data = await uploadFile(file);
       setCurrentFile(data);
+      setCurrentFileId(data.file_id);
       setView('mapping');
     } catch (err) {
       setError('Error al subir el archivo.');
@@ -49,10 +53,10 @@ function App() {
   };
 
   const handleMappingConfirm = async (mapping: Record<string, string>) => {
-    if (!currentFile) return;
+    if (!currentFileId) return;
     try {
-      await saveMapping(currentFile.file_id, mapping);
-      await loadDashboard(currentFile.file_id);
+      await saveMapping(currentFileId, mapping);
+      await loadDashboard(currentFileId);
     } catch (err) {
       console.error(err);
       alert("Error al guardar el mapeo");
@@ -61,11 +65,10 @@ function App() {
 
   const handleExistingFileSelect = async (fileId: string) => {
     const file = files.find(f => f.id === fileId);
+    setCurrentFileId(fileId);
     if (file?.column_mapping) {
       await loadDashboard(fileId);
     } else {
-      // Si no tiene mapeo, deberíamos cargar la preview de nuevo (no implementado en backend getPreviewById para simplificar MVP)
-      // Por ahora, solo permitimos abrir dashboards listos o subir nuevos.
       alert("Este archivo está pendiente de mapeo. Por favor, súbelo de nuevo para mapearlo (Mejora pendiente).");
     }
   };
@@ -78,6 +81,19 @@ function App() {
     } catch (err) {
       console.error(err);
       alert("Error cargando el dashboard");
+    }
+  };
+
+  const handleSaveAlerts = async (rules: any[]) => {
+    if (!currentFileId) return;
+    try {
+      await saveAlerts(currentFileId, rules);
+      setShowConfig(false);
+      await loadDashboard(currentFileId); // Recargar para ver alertas activadas
+      alert("Alertas guardadas y aplicadas.");
+    } catch (err) {
+      console.error(err);
+      alert("Error guardando alertas");
     }
   };
 
@@ -107,7 +123,9 @@ function App() {
           <FileList 
             files={files} 
             onSelect={handleExistingFileSelect} 
-            onNewUpload={() => setView('upload')} 
+            onNewUpload={() => setView('upload')}
+            onFileSelect={handleFileSelect}
+            isUploading={isUploading}
           />
         )}
 
@@ -148,13 +166,30 @@ function App() {
                 <h2 className="text-3xl font-bold text-gray-900">Dashboard de Resultados</h2>
                 <p className="text-gray-500 mt-1">Visualización generada automáticamente</p>
               </div>
-              <button 
-                onClick={() => window.print()}
-                className="text-sm text-blue-600 hover:underline"
-              >
-                Exportar PDF
-              </button>
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setShowConfig(!showConfig)}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 text-gray-700 shadow-sm"
+                >
+                  <Settings className="w-4 h-4" />
+                  {showConfig ? 'Ocultar Configuración' : 'Configurar Alertas'}
+                </button>
+                <button 
+                  onClick={() => window.print()}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  Exportar PDF
+                </button>
+              </div>
             </div>
+
+            {showConfig && (
+              <AlertConfig 
+                columns={dashboardData.kpis.map((k: any) => k.label.replace('Total ', ''))} 
+                onSave={handleSaveAlerts} 
+              />
+            )}
+
             <DashboardView data={dashboardData} />
           </div>
         )}

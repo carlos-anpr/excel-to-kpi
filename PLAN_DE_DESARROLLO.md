@@ -75,7 +75,7 @@ Organización limpia separando responsabilidades.
         *   Si hay una columna "Categoría" y una "Numérica" -> Renderiza un **BarChart**.
         *   Tarjetas de KPI (Suma total, Promedio).
 
-### Fase 4: Alertas Simples (Sin colas de tareas complejas)
+### Fase 4: Alertas Simples (Sin colas de tareas complejas) - [COMPLETADO]
 **Objetivo:** Notificar si un valor supera un límite.
 
 *   *Simplificación:* En lugar de un proceso en segundo plano (Celery), verificaremos las alertas **en el momento de la carga o actualización manual** del dashboard.
@@ -88,6 +88,12 @@ Organización limpia separando responsabilidades.
     *   Notificación visual (Toast o Banner) si el backend devuelve alertas activadas.
 
 ---
+
+## Estado Actual del Proyecto
+- **Fase 0, 1, 2, 3 y 4 Completadas.**
+- El sistema permite subir archivos, mapear columnas, generar dashboards y configurar alertas visuales.
+- El backend utiliza SQLite para persistencia de metadatos y reglas de alerta.
+- El frontend permite la navegación entre archivos y la configuración de alertas desde el dashboard.
 
 ## Backlog y Preguntas Abiertas (Para escalar)
 

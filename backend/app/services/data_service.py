@@ -58,8 +58,8 @@ class DataService:
             raise ValueError(f"Error al procesar el archivo: {str(e)}")
 
     @staticmethod
-    def get_dashboard_data(file_id: str, mapping: dict) -> dict:
-        """Genera los datos para el dashboard basado en el mapeo."""
+    def get_dashboard_data(file_id: str, mapping: dict, alert_rules: list = None) -> dict:
+        """Genera los datos para el dashboard basado en el mapeo y evalúa alertas."""
         found_file = None
         for f in os.listdir(UPLOAD_DIR):
             if f.startswith(file_id):
@@ -82,7 +82,8 @@ class DataService:
 
             dashboard_data = {
                 "kpis": [],
-                "charts": []
+                "charts": [],
+                "alerts": []
             }
 
             # 1. Generar KPIs (Suma total de columnas numéricas)
@@ -133,6 +134,31 @@ class DataService:
                         "data": bar_df.to_dict(orient="records"),
                         "bars": [metric]
                     })
+
+            # 4. Evaluar Alertas
+            if alert_rules:
+                for rule in alert_rules:
+                    column = rule.get("column")
+                    threshold = float(rule.get("threshold", 0))
+                    operator = rule.get("operator", ">")
+                    
+                    if column in df.columns:
+                        triggered = False
+                        count = 0
+                        
+                        if operator == ">":
+                            matches = df[df[column] > threshold]
+                        elif operator == "<":
+                            matches = df[df[column] < threshold]
+                        else:
+                            matches = []
+
+                        if len(matches) > 0:
+                            dashboard_data["alerts"].append({
+                                "rule": f"{column} {operator} {threshold}",
+                                "count": len(matches),
+                                "message": f"Alerta: {len(matches)} registros tienen '{column}' {operator} {threshold}"
+                            })
 
             return dashboard_data
 

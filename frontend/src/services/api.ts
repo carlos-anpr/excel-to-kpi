@@ -37,3 +37,8 @@ export const getDashboard = async (fileId: string) => {
   const response = await axios.get(`${API_URL}/dashboard/${fileId}`);
   return response.data;
 };
+
+export const saveAlerts = async (fileId: string, rules: any[]) => {
+  const response = await axios.post(`${API_URL}/files/${fileId}/alerts`, rules);
+  return response.data;
+};
