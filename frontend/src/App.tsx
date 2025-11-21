@@ -23,6 +23,7 @@ function App() {
   const [isEditing, setIsEditing] = useState(false);
   const [currentConfig, setCurrentConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'data'>('dashboard');
+  const [editTab, setEditTab] = useState<'preview' | 'data'>('preview');
 
   // Cargar lista de archivos al inicio
   useEffect(() => {
@@ -296,14 +297,45 @@ function App() {
                 </div>
 
                 {/* Right Panel: Live Preview */}
-                <div className="flex-1 overflow-y-auto bg-gray-50 rounded-xl border border-gray-200 p-6">
+                <div className="flex-1 overflow-y-auto bg-gray-50 rounded-xl border border-gray-200 p-6 flex flex-col">
                   <div className="mb-4 flex justify-between items-center">
-                    <h2 className="text-xl font-bold text-gray-800">Vista Previa en Vivo</h2>
-                    <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">Los cambios se aplican automáticamente</span>
+                    <div className="flex items-center gap-2 bg-white p-1 rounded-lg border shadow-sm">
+                        <button
+                            onClick={() => setEditTab('preview')}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${editTab === 'preview' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            <BarChart2 className="w-3.5 h-3.5" />
+                            Vista Previa
+                        </button>
+                        <button
+                            onClick={() => setEditTab('data')}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${editTab === 'data' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            <TableIcon className="w-3.5 h-3.5" />
+                            Datos Fuente
+                        </button>
+                    </div>
+                    <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">
+                        {editTab === 'preview' ? 'Los cambios se aplican automáticamente' : 'Arrastra columnas para configurar'}
+                    </span>
                   </div>
-                  <div className="pointer-events-none opacity-90 scale-95 origin-top">
-                     {/* Pointer events none to prevent interaction during preview if desired, or keep it interactive */}
-                    <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
+                  
+                  <div className="flex-1 overflow-hidden relative">
+                    {editTab === 'preview' ? (
+                        <div className="pointer-events-none opacity-90 scale-95 origin-top h-full overflow-y-auto">
+                            <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
+                        </div>
+                    ) : (
+                        <div className="h-full overflow-auto bg-white rounded-lg border shadow-sm p-4">
+                             {currentFile ? (
+                                <PreviewTable data={currentFile.preview} columns={currentFile.columns} />
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-gray-400">
+                                    Cargando datos...
+                                </div>
+                            )}
+                        </div>
+                    )}
                   </div>
                 </div>
               </div>
