@@ -27,6 +27,7 @@ async def upload_file(file: UploadFile = File(...), session: Session = Depends(g
         session.commit()
         
         preview_data = DataService.get_preview(file_id)
+        preview_data["filename"] = file.filename
         return preview_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -39,6 +40,7 @@ async def get_file_preview(file_id: str, session: Session = Depends(get_session)
     
     try:
         preview_data = DataService.get_preview(file_id)
+        preview_data["filename"] = file_record.filename
         return preview_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

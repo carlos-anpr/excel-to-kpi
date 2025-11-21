@@ -9,12 +9,12 @@ export const PreviewTable: React.FC<PreviewTableProps> = ({ data, columns }) => 
   if (!data || data.length === 0) return null;
 
   return (
-    <div className="w-full overflow-x-auto border rounded-lg shadow-sm mt-8">
-      <table className="w-full text-sm text-left text-gray-500">
-        <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+    <div className="w-full overflow-auto border rounded-lg shadow-sm mt-8 max-h-[450px]">
+      <table className="w-full text-sm text-left text-gray-500 relative">
+        <thead className="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0 z-10 shadow-sm">
           <tr>
             {columns.map((col) => (
-              <th key={col} className="px-6 py-3 font-bold">
+              <th key={col} className="px-6 py-3 font-bold bg-gray-50">
                 {col}
               </th>
             ))}
