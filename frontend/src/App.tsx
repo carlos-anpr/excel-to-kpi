@@ -297,8 +297,8 @@ function App() {
                 </div>
 
                 {/* Right Panel: Live Preview */}
-                <div className="flex-1 overflow-y-auto bg-gray-50 rounded-xl border border-gray-200 p-6 flex flex-col">
-                  <div className="mb-4 flex justify-between items-center">
+                <div className="flex-1 bg-gray-50 rounded-xl border border-gray-200 p-6 flex flex-col overflow-hidden">
+                  <div className="mb-4 flex justify-between items-center flex-shrink-0">
                     <div className="flex items-center gap-2 bg-white p-1 rounded-lg border shadow-sm">
                         <button
                             onClick={() => setEditTab('preview')}
@@ -322,8 +322,10 @@ function App() {
                   
                   <div className="flex-1 overflow-hidden relative">
                     {editTab === 'preview' ? (
-                        <div className="pointer-events-none opacity-90 scale-95 origin-top h-full overflow-y-auto">
-                            <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
+                        <div className="h-full overflow-y-auto pr-2">
+                            <div className="origin-top pb-4">
+                                <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
+                            </div>
                         </div>
                     ) : (
                         <div className="h-full overflow-auto bg-white rounded-lg border shadow-sm p-4">
