@@ -93,6 +93,20 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId, index }) =>
     return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2 }).format(num);
   };
 
+  const formatXAxis = (tickItem: any) => {
+    if (typeof tickItem === 'string' && (tickItem.includes('T') || tickItem.includes('-'))) {
+      const date = new Date(tickItem);
+      if (!isNaN(date.getTime())) {
+        return new Intl.DateTimeFormat('es-ES', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        }).format(date);
+      }
+    }
+    return tickItem;
+  };
+
   const renderChart = () => {
     const commonProps = {
       data: chart.data,
@@ -104,10 +118,11 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId, index }) =>
         return (
           <LineChart {...commonProps}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-            <XAxis dataKey={chart.xAxis} fontSize={12} tickMargin={10} stroke="#9ca3af" />
+            <XAxis dataKey={chart.xAxis} fontSize={12} tickMargin={10} stroke="#9ca3af" tickFormatter={formatXAxis} />
             <YAxis fontSize={12} tickFormatter={(val) => `${val / 1000}k`} stroke="#9ca3af" />
             <Tooltip 
               formatter={(value: number) => formatNumber(value)}
+              labelFormatter={formatXAxis}
               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
             />
             <Legend />
@@ -128,10 +143,11 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId, index }) =>
         return (
           <BarChart {...commonProps}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-            <XAxis dataKey={chart.xAxis} fontSize={12} tickMargin={10} stroke="#9ca3af" />
+            <XAxis dataKey={chart.xAxis} fontSize={12} tickMargin={10} stroke="#9ca3af" tickFormatter={formatXAxis} />
             <YAxis fontSize={12} tickFormatter={(val) => `${val / 1000}k`} stroke="#9ca3af" />
             <Tooltip 
               formatter={(value: number) => formatNumber(value)}
+              labelFormatter={formatXAxis}
               cursor={{ fill: '#f3f4f6' }}
               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
             />
@@ -158,10 +174,11 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId, index }) =>
               ))}
             </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-            <XAxis dataKey={chart.xAxis} fontSize={12} tickMargin={10} stroke="#9ca3af" />
+            <XAxis dataKey={chart.xAxis} fontSize={12} tickMargin={10} stroke="#9ca3af" tickFormatter={formatXAxis} />
             <YAxis fontSize={12} tickFormatter={(val) => `${val / 1000}k`} stroke="#9ca3af" />
             <Tooltip 
               formatter={(value: number) => formatNumber(value)}
+              labelFormatter={formatXAxis}
               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
             />
             <Legend />

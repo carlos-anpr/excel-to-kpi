@@ -155,6 +155,7 @@ class DataService:
                     y_cols = chart.get("yAxis", [])
                     breakdown_col = chart.get("breakdown")
                     title = chart.get("title", "Gráfico")
+                    order = chart.get("order", 0)
 
                     if x_col and y_cols and x_col in df.columns:
                         try:
@@ -176,16 +177,30 @@ class DataService:
                             # Si X parece fecha, intentar ordenar cronológicamente
                             is_date = False
                             try:
-                                if chart_df[x_col].dtype == 'object':
-                                    chart_df[x_col] = pd.to_datetime(chart_df[x_col])
+                                # Check if it's already datetime-like
+                                if pd.api.types.is_datetime64_any_dtype(chart_df[x_col]):
                                     is_date = True
-                            except:
+                                else:
+                                    # Try to convert to datetime
+                                    # errors='coerce' will turn unparseable data into NaT
+                                    temp_series = pd.to_datetime(chart_df[x_col], errors='coerce')
+                                    # If we have at least some valid dates (not all NaT), treat as date
+                                    if not temp_series.isna().all():
+                                        chart_df[x_col] = temp_series
+                                        is_date = True
+                            except Exception as e:
+                                print(f"Date conversion warning for {x_col}: {e}")
                                 pass 
 
                             if breakdown_col and breakdown_col in chart_df.columns:
                                 # --- LÓGICA DE AGRUPACIÓN (BREAKDOWN) ---
                                 # Agrupar por [X, Breakdown] y sumar la primera métrica Y
                                 metric = y_cols[0]
+                                
+                                # Drop rows where x_col is NaT/NaN if it's a date
+                                if is_date:
+                                    chart_df = chart_df.dropna(subset=[x_col])
+
                                 grouped_df = chart_df.groupby([x_col, breakdown_col])[metric].sum().reset_index()
                                 
                                 # Pivotar para que los valores de breakdown sean columnas
@@ -197,6 +212,7 @@ class DataService:
                                 
                                 if is_date:
                                     pivot_df = pivot_df.sort_values(x_col)
+                                    # Convert to string for JSON serialization
                                     pivot_df[x_col] = pivot_df[x_col].dt.strftime('%Y-%m-%d')
                                 
                                 dashboard_data["charts"].append({
@@ -205,11 +221,15 @@ class DataService:
                                     "title": f"{title} (por {breakdown_col})",
                                     "xAxis": x_col,
                                     "data": pivot_df.to_dict(orient="records"),
-                                    "bars": new_series # Usamos 'bars' para que ChartCard las pinte
+                                    "bars": new_series, # Usamos 'bars' para que ChartCard las pinte
+                                    "order": order
                                 })
                                 
                             else:
                                 # --- LÓGICA SIMPLE (SIN AGRUPACIÓN) ---
+                                if is_date:
+                                    chart_df = chart_df.dropna(subset=[x_col])
+                                    
                                 grouped_df = chart_df.groupby(x_col)[y_cols].sum().reset_index()
                                 
                                 if is_date:
@@ -233,10 +253,13 @@ class DataService:
                                     "xAxis": x_col,
                                     "data": grouped_df.to_dict(orient="records"),
                                     "lines": y_cols if chart_type == "line" else None,
-                                    "bars": y_cols if chart_type == "bar" else None
+                                    "bars": y_cols if chart_type == "bar" else None,
+                                    "order": order
                                 })
                         except Exception as e:
                             print(f"Error generando gráfico {title}: {e}")
+                            import traceback
+                            traceback.print_exc()
 
             else:
                 # --- LÓGICA ANTIGUA (Retrocompatibilidad) ---

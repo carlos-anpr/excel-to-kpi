@@ -16,6 +16,7 @@ interface ChartConfig {
   xAxis: string | null;
   yAxis: string[];
   breakdown: string | null;
+  order: number;
 }
 
 // --- Helper Component: Column Selector (Smart Dropdown) ---
@@ -94,17 +95,21 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
   const [kpis, setKpis] = useState<string[]>(() => initialConfig?.kpis || []);
   const [charts, setCharts] = useState<ChartConfig[]>(() => {
     if (initialConfig?.charts) {
-      return initialConfig.charts.map((c: any, index: number) => ({
-        id: c.id || Date.now() + index,
-        name: c.title || `Gráfico ${index + 1}`,
-        xAxis: c.xAxis,
-        yAxis: c.yAxis || [],
-        breakdown: c.breakdown
-      }));
+      return initialConfig.charts
+        .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+        .map((c: any, index: number) => ({
+          id: c.id || Date.now() + index,
+          name: c.title || `Gráfico ${index + 1}`,
+          xAxis: c.xAxis,
+          yAxis: c.yAxis || [],
+          breakdown: c.breakdown,
+          order: c.order ?? index
+        }));
     }
-    return [{ id: 1, name: 'Gráfico Principal', xAxis: null, yAxis: [], breakdown: null }];
+    return [{ id: 1, name: 'Gráfico Principal', xAxis: null, yAxis: [], breakdown: null, order: 0 }];
   });
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+  const [draggedChartIndex, setDraggedChartIndex] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(true);
   const prevChartsLength = useRef(charts.length);
 
@@ -127,17 +132,43 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
     prevChartsLength.current = charts.length;
   }, [charts]);
 
+  // Sync with external config updates (e.g. from DashboardView reordering)
+  useEffect(() => {
+    if (initialConfig?.charts) {
+       const newChartsState = initialConfig.charts
+        .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0))
+        .map((c: any, index: number) => ({
+          id: c.id || Date.now() + index,
+          name: c.title || `Gráfico ${index + 1}`,
+          xAxis: c.xAxis,
+          yAxis: c.yAxis || [],
+          breakdown: c.breakdown,
+          order: c.order ?? index
+        }));
+        
+        // Compare IDs to see if order or content changed significantly enough to replace state
+        // We use JSON stringify of a simplified object to check for deep equality of structure/order
+        const currentStateSig = JSON.stringify(charts.map(c => ({ id: c.id, order: c.order })));
+        const newStateSig = JSON.stringify(newChartsState.map((c: any) => ({ id: c.id, order: c.order })));
+        
+        if (currentStateSig !== newStateSig) {
+            setCharts(newChartsState);
+        }
+    }
+  }, [initialConfig]);
+
   // Effect to trigger onChange whenever state changes
   React.useEffect(() => {
     if (onChange) {
       const config = {
         kpis,
-        charts: charts.map(c => ({
+        charts: charts.map((c, index) => ({
           id: c.id,
           title: c.name,
           xAxis: c.xAxis,
           yAxis: c.yAxis,
-          breakdown: c.breakdown
+          breakdown: c.breakdown,
+          order: index
         }))
       };
       onChange(config);
@@ -153,10 +184,47 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
 
   const handleDrop = (e: React.DragEvent, type: 'kpi' | 'xAxis' | 'yAxis' | 'breakdown', chartId?: number) => {
     e.preventDefault();
+    e.stopPropagation(); // Stop propagation to prevent chart drop
     const col = draggedColumn;
     if (!col) return;
     handleDirectAdd(type, col, chartId);
     setDraggedColumn(null);
+  };
+
+  const handleChartDragStart = (e: React.DragEvent, index: number) => {
+    e.stopPropagation();
+    setDraggedChartIndex(index);
+    e.dataTransfer.setData('application/x-chart-index', index.toString());
+    e.dataTransfer.effectAllowed = 'move';
+    // Create a ghost image or style
+    if (e.currentTarget instanceof HTMLElement) {
+        e.currentTarget.style.opacity = '0.5';
+    }
+  };
+
+  const handleChartDragEnd = (e: React.DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+        e.currentTarget.style.opacity = '1';
+    }
+    setDraggedChartIndex(null);
+  };
+
+  const handleChartDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dragIndexStr = e.dataTransfer.getData('application/x-chart-index');
+    if (!dragIndexStr) return;
+    
+    const dragIndex = parseInt(dragIndexStr);
+    if (isNaN(dragIndex) || dragIndex === dropIndex) return;
+
+    const newCharts = [...charts];
+    const [removed] = newCharts.splice(dragIndex, 1);
+    newCharts.splice(dropIndex, 0, removed);
+    
+    // Update orders
+    const updatedCharts = newCharts.map((c, i) => ({ ...c, order: i }));
+    setCharts(updatedCharts);
   };
 
   // --- Direct State Manipulation (Shared) ---
@@ -196,7 +264,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
 
   const addChart = () => {
     const newId = Date.now();
-    setCharts([...charts, { id: newId, name: `Gráfico ${charts.length + 1}`, xAxis: null, yAxis: [], breakdown: null }]);
+    setCharts([...charts, { id: newId, name: `Gráfico ${charts.length + 1}`, xAxis: null, yAxis: [], breakdown: null, order: charts.length }]);
   };
 
   const removeChart = (id: number) => {
@@ -210,12 +278,13 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
     }
     const config = {
       kpis,
-      charts: charts.map(c => ({
+      charts: charts.map((c, index) => ({
         id: c.id,
         title: c.name,
         xAxis: c.xAxis,
         yAxis: c.yAxis,
-        breakdown: c.breakdown
+        breakdown: c.breakdown,
+        order: index
       }))
     };
     onConfirm(config);
@@ -279,16 +348,31 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
               </button>
             </div>
 
-            {charts.map((chart) => (
-              <div key={chart.id} id={`chart-${chart.id}`} className="bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-300">
+            {charts.map((chart, index) => (
+              <div 
+                key={chart.id} 
+                id={`chart-${chart.id}`} 
+                draggable
+                onDragStart={(e) => handleChartDragStart(e, index)}
+                onDragEnd={handleChartDragEnd}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => handleChartDrop(e, index)}
+                className={`bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-300 ${draggedChartIndex === index ? 'opacity-50 border-blue-400 border-dashed' : ''}`}
+              >
                 {/* Chart Header */}
-                <div className="bg-gray-50 px-3 py-2 border-b border-gray-100 flex justify-between items-center">
-                  <input 
-                    value={chart.name}
-                    onChange={(e) => setCharts(charts.map(c => c.id === chart.id ? { ...c, name: e.target.value } : c))}
-                    className="bg-transparent text-sm font-semibold text-gray-700 focus:outline-none w-full hover:bg-gray-100 rounded px-1 transition-colors"
-                    placeholder="Nombre del gráfico"
-                  />
+                <div className="bg-gray-50 px-3 py-2 border-b border-gray-100 flex justify-between items-center cursor-move">
+                  <div className="flex items-center gap-2 flex-1">
+                    <GripVertical className="w-4 h-4 text-gray-400" />
+                    <span className="bg-blue-100 text-blue-700 text-xs font-bold px-1.5 py-0.5 rounded border border-blue-200" title="Orden">
+                      #{index + 1}
+                    </span>
+                    <input 
+                      value={chart.name}
+                      onChange={(e) => setCharts(charts.map(c => c.id === chart.id ? { ...c, name: e.target.value } : c))}
+                      className="bg-transparent text-sm font-semibold text-gray-700 focus:outline-none w-full hover:bg-gray-100 rounded px-1 transition-colors"
+                      placeholder="Nombre del gráfico"
+                    />
+                  </div>
                   {charts.length > 1 && (
                     <button onClick={() => removeChart(chart.id)} className="text-gray-400 hover:text-red-500 ml-2">
                       <Trash2 className="w-3.5 h-3.5" />

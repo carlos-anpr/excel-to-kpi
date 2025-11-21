@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChartCard } from './ChartCard';
 
 interface DashboardData {
@@ -15,6 +15,7 @@ interface DashboardData {
     data: any[];
     lines?: string[];
     bars?: string[];
+    order?: number;
   }[];
   alerts?: {
     rule: string;
@@ -26,11 +27,58 @@ interface DashboardData {
 interface DashboardViewProps {
   data: DashboardData;
   fileId?: string;
+  onReorder?: (newOrder: any[]) => void;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ data, fileId }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ data, fileId, onReorder }) => {
+  const [localCharts, setLocalCharts] = useState(data.charts);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    setLocalCharts(data.charts.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+  }, [data.charts]);
+
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2 }).format(num);
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    if (!onReorder) return; // Only enable drag if handler provided
+    setDraggedIndex(index);
+    e.dataTransfer.setData('application/x-chart-view-index', index.toString());
+    e.dataTransfer.effectAllowed = 'move';
+    if (e.currentTarget instanceof HTMLElement) {
+        e.currentTarget.style.opacity = '0.5';
+    }
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+        e.currentTarget.style.opacity = '1';
+    }
+    setDraggedIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (!onReorder) return;
+    
+    const dragIndexStr = e.dataTransfer.getData('application/x-chart-view-index');
+    if (!dragIndexStr) return;
+    
+    const dragIndex = parseInt(dragIndexStr);
+    if (isNaN(dragIndex) || dragIndex === dropIndex) return;
+
+    const newCharts = [...localCharts];
+    const [removed] = newCharts.splice(dragIndex, 1);
+    newCharts.splice(dropIndex, 0, removed);
+    
+    // Update orders locally
+    const updatedCharts = newCharts.map((c, i) => ({ ...c, order: i }));
+    setLocalCharts(updatedCharts);
+    
+    // Notify parent
+    onReorder(updatedCharts);
   };
 
   return (
@@ -70,8 +118,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, fileId }) =>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {data.charts.map((chart, idx) => (
-          <ChartCard key={idx} chart={chart} fileId={fileId} index={idx} />
+        {localCharts.map((chart, idx) => (
+            <div
+                key={chart.id || idx}
+                draggable={!!onReorder}
+                onDragStart={(e) => handleDragStart(e, idx)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => handleDrop(e, idx)}
+                className={`transition-all duration-300 ${draggedIndex === idx ? 'opacity-50 scale-95' : ''} ${onReorder ? 'cursor-move' : ''}`}
+            >
+                <ChartCard chart={chart} fileId={fileId} index={idx} />
+            </div>
         ))}
       </div>
     </div>

@@ -175,6 +175,63 @@ function App() {
     }
   };
 
+  const handleChartReorder = async (newChartsOrder: any[]) => {
+    if (!currentFileId || !dashboardData) return;
+
+    // Update local dashboard data immediately for UI responsiveness
+    setDashboardData({
+        ...dashboardData,
+        charts: newChartsOrder
+    });
+
+    // If we are in editing mode, we also need to update the currentConfig
+    // so that if the user clicks "Apply" or "Generate", the order is preserved.
+    // However, newChartsOrder contains processed data, not the config structure.
+    // We need to map the order back to the config.
+    
+    // We can try to fetch the current mapping first to be safe, or use currentConfig if available.
+    // Since we might be in 'view' mode (not editing), currentConfig might be null.
+    
+    try {
+        // 1. Get current mapping (from state or server)
+        let mappingToUpdate = currentConfig;
+        if (!mappingToUpdate) {
+             const filesList = await getFiles();
+             const file = filesList.find(f => f.id === currentFileId);
+             mappingToUpdate = file?.column_mapping;
+        }
+
+        if (mappingToUpdate && mappingToUpdate.charts) {
+            // 2. Update order in mapping based on IDs
+            const newOrderMap = new Map(newChartsOrder.map((c, i) => [c.id, i]));
+            
+            const updatedChartsConfig = mappingToUpdate.charts.map((c: any) => ({
+                ...c,
+                order: newOrderMap.get(c.id) ?? c.order ?? 0
+            }));
+
+            // Sort config array as well to match
+            updatedChartsConfig.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+
+            const newConfig = {
+                ...mappingToUpdate,
+                charts: updatedChartsConfig
+            };
+
+            // 3. Save to backend
+            await saveMapping(currentFileId, newConfig);
+            
+            // Update current config state if we are editing
+            if (isEditing) {
+                setCurrentConfig(newConfig);
+                setInitialMapping(newConfig); // Sync Builder
+            }
+        }
+    } catch (err) {
+        console.error("Error saving reorder", err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navbar Simple */}
@@ -324,7 +381,11 @@ function App() {
                     {editTab === 'preview' ? (
                         <div className="h-full overflow-y-auto pr-2">
                             <div className="origin-top pb-4">
-                                <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
+                                <DashboardView 
+                                    data={dashboardData} 
+                                    fileId={currentFileId || undefined} 
+                                    onReorder={handleChartReorder}
+                                />
                             </div>
                         </div>
                     ) : (
@@ -399,7 +460,11 @@ function App() {
                         />
                         )}
 
-                        <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
+                        <DashboardView 
+                            data={dashboardData} 
+                            fileId={currentFileId || undefined} 
+                            onReorder={handleChartReorder}
+                        />
                     </>
                 ) : (
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 min-h-[400px]">
