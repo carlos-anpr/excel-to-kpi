@@ -100,3 +100,20 @@ async def get_dashboard(file_id: str, session: Session = Depends(get_session)):
         return dashboard_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/dashboard/{file_id}/preview")
+async def preview_dashboard(file_id: str, mapping: Dict, session: Session = Depends(get_session)):
+    file_record = session.get(FileRecord, file_id)
+    if not file_record:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+        
+    try:
+        # Usamos el mapeo enviado en el body, no el guardado
+        dashboard_data = DataService.get_dashboard_data(
+            file_id, 
+            mapping,
+            file_record.alert_rules
+        )
+        return dashboard_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

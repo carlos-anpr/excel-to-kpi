@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { DashboardBuilder } from './components/DashboardBuilder'
 import { FileList } from './components/FileList'
 import { FileUploader } from './components/FileUploader'
 import { AlertConfig } from './components/AlertConfig'
 import { DashboardView } from './components/DashboardView'
-import { uploadFile, saveMapping, getFiles, getDashboard, saveAlerts, deleteFile, getFilePreview, UploadResponse } from './services/api'
-import { LayoutDashboard, ArrowLeft, Settings } from 'lucide-react'
+import { uploadFile, saveMapping, getFiles, getDashboard, saveAlerts, deleteFile, getFilePreview, UploadResponse, getDashboardPreview } from './services/api'
+import { LayoutDashboard, ArrowLeft, Settings, Edit, Check } from 'lucide-react'
 
 type ViewState = 'list' | 'upload' | 'mapping' | 'dashboard';
 
@@ -18,6 +18,9 @@ function App() {
   const [showConfig, setShowConfig] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initialMapping, setInitialMapping] = useState<any>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentConfig, setCurrentConfig] = useState<any>(null);
 
   // Cargar lista de archivos al inicio
   useEffect(() => {
@@ -38,6 +41,7 @@ function App() {
   const handleFileSelect = async (file: File) => {
     setIsUploading(true);
     setError(null);
+    setInitialMapping(null);
     try {
       const data = await uploadFile(file);
       setCurrentFile(data);
@@ -57,11 +61,24 @@ function App() {
       // config ahora es { kpis: [], charts: [] }
       await saveMapping(currentFileId, config);
       await loadDashboard(currentFileId);
+      setIsEditing(false);
     } catch (err) {
       console.error(err);
       alert("Error al guardar la configuración");
     }
   };
+
+  const handleMappingChange = useCallback(async (config: any) => {
+    if (!currentFileId) return;
+    setCurrentConfig(config);
+    try {
+      // Debounce could be added here if needed, but for now direct call
+      const previewData = await getDashboardPreview(currentFileId, config);
+      setDashboardData(previewData);
+    } catch (err) {
+      console.error("Error updating preview", err);
+    }
+  }, [currentFileId]);
 
   const handleExistingFileSelect = async (fileId: string) => {
     const file = files.find(f => f.id === fileId);
@@ -74,11 +91,37 @@ function App() {
       try {
         const previewData = await getFilePreview(fileId);
         setCurrentFile(previewData);
+        setInitialMapping(null);
         setView('mapping');
       } catch (err) {
         console.error(err);
         alert("Error al recuperar el archivo para mapeo.");
       }
+    }
+  };
+
+  const handleEditMapping = async () => {
+    if (!currentFileId) return;
+    
+    try {
+      // 1. Get file preview data if not already loaded
+      if (!currentFile) {
+        const previewData = await getFilePreview(currentFileId);
+        setCurrentFile(previewData);
+      }
+      
+      // 2. Get current mapping from files list (or fetch fresh if needed)
+      const filesList = await getFiles();
+      const file = filesList.find(f => f.id === currentFileId);
+      
+      if (file && file.column_mapping) {
+        setInitialMapping(file.column_mapping);
+      }
+      
+      setIsEditing(true);
+    } catch (err) {
+      console.error(err);
+      alert("Error al cargar la configuración para editar.");
     }
   };
 
@@ -122,14 +165,14 @@ function App() {
       <nav className="bg-white border-b px-8 py-4 flex items-center justify-between sticky top-0 z-10">
         <div 
           className="flex items-center gap-2 font-bold text-xl text-blue-600 cursor-pointer"
-          onClick={() => setView('list')}
+          onClick={() => { setView('list'); setIsEditing(false); }}
         >
           <LayoutDashboard className="w-6 h-6" />
           <span>AI Dashboard</span>
         </div>
         {view !== 'list' && (
           <button 
-            onClick={() => setView('list')}
+            onClick={() => { setView('list'); setIsEditing(false); }}
             className="text-sm text-gray-500 hover:text-gray-800 flex items-center gap-1"
           >
             <ArrowLeft className="w-4 h-4" /> Volver al inicio
@@ -137,7 +180,7 @@ function App() {
         )}
       </nav>
 
-      <main className="p-8 max-w-7xl mx-auto">
+      <main className={`p-8 mx-auto ${isEditing ? 'max-w-[1600px]' : 'max-w-7xl'}`}>
         {view === 'list' && (
           <FileList 
             files={files} 
@@ -170,43 +213,95 @@ function App() {
             <DashboardBuilder 
               columns={currentFile.columns} 
               previewData={currentFile.preview}
-              onConfirm={handleMappingConfirm} 
+              onConfirm={handleMappingConfirm}
+              initialConfig={initialMapping}
             />
           </div>
         )}
 
         {view === 'dashboard' && dashboardData && (
           <div className="animate-in fade-in zoom-in-95 duration-300">
-            <div className="flex justify-between items-end mb-8">
-              <div>
-                <h2 className="text-3xl font-bold text-gray-900">Dashboard de Resultados</h2>
-                <p className="text-gray-500 mt-1">Visualización generada automáticamente</p>
-              </div>
-              <div className="flex gap-4">
-                <button 
-                  onClick={() => setShowConfig(!showConfig)}
-                  className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 text-gray-700 shadow-sm"
-                >
-                  <Settings className="w-4 h-4" />
-                  {showConfig ? 'Ocultar Configuración' : 'Configurar Alertas'}
-                </button>
-                <button 
-                  onClick={() => window.print()}
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  Exportar PDF
-                </button>
-              </div>
-            </div>
+            
+            {isEditing ? (
+              <div className="flex gap-6 h-[calc(100vh-140px)]">
+                {/* Left Panel: Builder */}
+                <div className="w-1/3 min-w-[350px] bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden flex flex-col">
+                  <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+                    <h3 className="font-bold text-gray-700">Configuración</h3>
+                    <button 
+                      onClick={() => currentConfig && handleMappingConfirm(currentConfig)}
+                      className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 flex items-center gap-1"
+                    >
+                      <Check className="w-3 h-3" /> Aplicar
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    {currentFile && (
+                      <DashboardBuilder 
+                        columns={currentFile.columns} 
+                        previewData={currentFile.preview}
+                        onConfirm={handleMappingConfirm}
+                        initialConfig={initialMapping}
+                        onChange={handleMappingChange}
+                        compact={true}
+                      />
+                    )}
+                  </div>
+                </div>
 
-            {showConfig && (
-              <AlertConfig 
-                columns={dashboardData.kpis.map((k: any) => k.label.replace('Total ', ''))} 
-                onSave={handleSaveAlerts} 
-              />
+                {/* Right Panel: Live Preview */}
+                <div className="flex-1 overflow-y-auto bg-gray-50 rounded-xl border border-gray-200 p-6">
+                  <div className="mb-4 flex justify-between items-center">
+                    <h2 className="text-xl font-bold text-gray-800">Vista Previa en Vivo</h2>
+                    <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">Los cambios se aplican automáticamente</span>
+                  </div>
+                  <div className="pointer-events-none opacity-90 scale-95 origin-top">
+                     {/* Pointer events none to prevent interaction during preview if desired, or keep it interactive */}
+                    <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between items-end mb-8">
+                  <div>
+                    <h2 className="text-3xl font-bold text-gray-900">Dashboard de Resultados</h2>
+                    <p className="text-gray-500 mt-1">Visualización generada automáticamente</p>
+                  </div>
+                  <div className="flex gap-4">
+                    <button 
+                      onClick={handleEditMapping}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 text-blue-700 shadow-sm transition-colors"
+                    >
+                      <Edit className="w-4 h-4" />
+                      Editar Dashboard
+                    </button>
+                    <button 
+                      onClick={() => setShowConfig(!showConfig)}
+                      className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 text-gray-700 shadow-sm"
+                    >
+                      <Settings className="w-4 h-4" />
+                      {showConfig ? 'Ocultar Configuración' : 'Configurar Alertas'}
+                    </button>
+                    <button 
+                      onClick={() => window.print()}
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      Exportar PDF
+                    </button>
+                  </div>
+                </div>
+
+                {showConfig && (
+                  <AlertConfig 
+                    columns={dashboardData.kpis.map((k: any) => k.label.replace('Total ', ''))} 
+                    onSave={handleSaveAlerts} 
+                  />
+                )}
+
+                <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
+              </>
             )}
-
-            <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
           </div>
         )}
       </main>

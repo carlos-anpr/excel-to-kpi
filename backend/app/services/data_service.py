@@ -107,9 +107,18 @@ class DataService:
                     if col in df.columns:
                         # Intentar limpiar y convertir a numérico si es necesario
                         try:
-                            total = pd.to_numeric(df[col], errors='coerce').sum()
+                            numeric_series = pd.to_numeric(df[col], errors='coerce')
+                            
+                            # Si la conversión resulta en todo NaN (es texto), contamos únicos
+                            if numeric_series.isna().all():
+                                total = df[col].nunique()
+                                label = f"Unique {col}"
+                            else:
+                                total = numeric_series.sum()
+                                label = f"Total {col}"
+
                             dashboard_data["kpis"].append({
-                                "label": f"Total {col}",
+                                "label": label,
                                 "value": float(total) if pd.notnull(total) else 0,
                                 "type": "sum"
                             })

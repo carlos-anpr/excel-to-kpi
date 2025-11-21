@@ -38,6 +38,11 @@ export const getDashboard = async (fileId: string) => {
   return response.data;
 };
 
+export const getDashboardPreview = async (fileId: string, mapping: any) => {
+  const response = await axios.post(`${API_URL}/dashboard/${fileId}/preview`, mapping);
+  return response.data;
+};
+
 export const saveAlerts = async (fileId: string, rules: any[]) => {
   const response = await axios.post(`${API_URL}/files/${fileId}/alerts`, rules);
   return response.data;

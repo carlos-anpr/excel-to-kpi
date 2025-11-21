@@ -71,7 +71,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, fileId }) =>
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {data.charts.map((chart, idx) => (
-          <ChartCard key={idx} chart={chart} fileId={fileId} />
+          <ChartCard key={idx} chart={chart} fileId={fileId} index={idx} />
         ))}
       </div>
     </div>

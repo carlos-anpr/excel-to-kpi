@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell
@@ -18,6 +18,7 @@ interface ChartData {
 interface ChartCardProps {
   chart: ChartData;
   fileId?: string;
+  index?: number;
 }
 
 const COLORS = {
@@ -29,10 +30,14 @@ const COLORS = {
   mixed: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1']
 };
 
-export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId }) => {
+export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId, index }) => {
+  const chartId = chart.id ?? index;
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
+
   const getInitialState = (key: string, defaultVal: any) => {
-    if (!fileId || !chart.id) return defaultVal;
-    const storageKey = `chart_settings_${fileId}_${chart.id}`;
+    if (!fileId || chartId === undefined) return defaultVal;
+    const storageKey = `chart_settings_${fileId}_${chartId}`;
     const saved = localStorage.getItem(storageKey);
     if (saved) {
         try {
@@ -55,11 +60,31 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId }) => {
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
-    if (fileId && chart.id) {
-        const storageKey = `chart_settings_${fileId}_${chart.id}`;
+    if (fileId && chartId !== undefined) {
+        const storageKey = `chart_settings_${fileId}_${chartId}`;
         localStorage.setItem(storageKey, JSON.stringify({ type, colorTheme }));
     }
-  }, [type, colorTheme, fileId, chart.id]);
+  }, [type, colorTheme, fileId, chartId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        settingsMenuRef.current && 
+        !settingsMenuRef.current.contains(event.target as Node) &&
+        settingsButtonRef.current &&
+        !settingsButtonRef.current.contains(event.target as Node)
+      ) {
+        setShowSettings(false);
+      }
+    };
+
+    if (showSettings) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSettings]);
 
   const currentColors = COLORS[colorTheme];
   const isPieDisabled = chart.data.length > 10;
@@ -186,6 +211,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId }) => {
       <div className="flex justify-between items-start mb-6">
         <h3 className="text-lg font-semibold text-gray-800">{chart.title}</h3>
         <button 
+          ref={settingsButtonRef}
           onClick={() => setShowSettings(!showSettings)}
           className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors opacity-0 group-hover:opacity-100"
         >
@@ -194,7 +220,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId }) => {
       </div>
 
       {showSettings && (
-        <div className="absolute top-16 right-6 z-10 bg-white p-4 rounded-lg shadow-xl border border-gray-100 w-64 animate-in fade-in zoom-in-95 duration-200">
+        <div ref={settingsMenuRef} className="absolute top-16 right-6 z-10 bg-white p-4 rounded-lg shadow-xl border border-gray-100 w-64 animate-in fade-in zoom-in-95 duration-200">
           <div className="mb-4">
             <label className="block text-xs font-medium text-gray-500 mb-2">Tipo de Gráfico</label>
             <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
