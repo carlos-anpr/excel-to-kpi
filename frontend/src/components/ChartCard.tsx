@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell
@@ -6,6 +6,7 @@ import {
 import { Settings, BarChart2, Activity, PieChart as PieIcon, Layers } from 'lucide-react';
 
 interface ChartData {
+  id?: number;
   type: string;
   title: string;
   xAxis: string;
@@ -16,6 +17,7 @@ interface ChartData {
 
 interface ChartCardProps {
   chart: ChartData;
+  fileId?: string;
 }
 
 const COLORS = {
@@ -27,15 +29,37 @@ const COLORS = {
   mixed: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1']
 };
 
-export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
-  const [type, setType] = useState<'line' | 'bar' | 'area' | 'pie'>(chart.type as any || 'bar');
+export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId }) => {
+  const getInitialState = (key: string, defaultVal: any) => {
+    if (!fileId || !chart.id) return defaultVal;
+    const storageKey = `chart_settings_${fileId}_${chart.id}`;
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            return parsed[key] || defaultVal;
+        } catch (e) {
+            return defaultVal;
+        }
+    }
+    return defaultVal;
+  }
+
+  const [type, setType] = useState<'line' | 'bar' | 'area' | 'pie'>(() => getInitialState('type', chart.type as any || 'bar'));
   
   // Auto-detect if we should use mixed colors (if there are many series)
   const dataKeys = chart.lines || chart.bars || [];
   const defaultTheme = dataKeys.length > 1 ? 'mixed' : 'blue';
   
-  const [colorTheme, setColorTheme] = useState<keyof typeof COLORS>(defaultTheme);
+  const [colorTheme, setColorTheme] = useState<keyof typeof COLORS>(() => getInitialState('colorTheme', defaultTheme));
   const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    if (fileId && chart.id) {
+        const storageKey = `chart_settings_${fileId}_${chart.id}`;
+        localStorage.setItem(storageKey, JSON.stringify({ type, colorTheme }));
+    }
+  }, [type, colorTheme, fileId, chart.id]);
 
   const currentColors = COLORS[colorTheme];
   const isPieDisabled = chart.data.length > 10;
@@ -142,7 +166,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
               cy="50%"
               outerRadius={100}
               fill="#8884d8"
-              label={({ name, percent }: any) => `${name}: ${(percent * 100).toFixed(0)}%`}
+              label={({ percent }: any) => `${(percent * 100).toFixed(0)}%`}
             >
               {chart.data.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={currentColors[index % currentColors.length]} />

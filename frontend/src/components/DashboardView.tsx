@@ -8,6 +8,7 @@ interface DashboardData {
     type: string;
   }[];
   charts: {
+    id?: number;
     type: string;
     title: string;
     xAxis: string;
@@ -24,9 +25,10 @@ interface DashboardData {
 
 interface DashboardViewProps {
   data: DashboardData;
+  fileId?: string;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ data, fileId }) => {
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2 }).format(num);
   };
@@ -69,7 +71,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {data.charts.map((chart, idx) => (
-          <ChartCard key={idx} chart={chart} />
+          <ChartCard key={idx} chart={chart} fileId={fileId} />
         ))}
       </div>
     </div>

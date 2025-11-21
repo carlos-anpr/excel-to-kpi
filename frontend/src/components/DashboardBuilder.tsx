@@ -87,6 +87,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
     const config = {
       kpis,
       charts: charts.map(c => ({
+        id: c.id,
         title: c.name,
         xAxis: c.xAxis,
         yAxis: c.yAxis,

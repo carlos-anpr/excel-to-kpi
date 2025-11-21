@@ -118,6 +118,7 @@ class DataService:
 
                 # 2. Generar Gráficos Configurados
                 for chart in charts_config:
+                    chart_id = chart.get("id")
                     x_col = chart.get("xAxis")
                     y_cols = chart.get("yAxis", [])
                     breakdown_col = chart.get("breakdown")
@@ -156,6 +157,7 @@ class DataService:
                                     pivot_df[x_col] = pivot_df[x_col].dt.strftime('%Y-%m-%d')
                                 
                                 dashboard_data["charts"].append({
+                                    "id": chart_id,
                                     "type": "bar", # Default a barras apiladas o agrupadas
                                     "title": f"{title} (por {breakdown_col})",
                                     "xAxis": x_col,
@@ -182,6 +184,7 @@ class DataService:
                                 chart_type = "line" if (is_date or is_date_by_name) else "bar"
 
                                 dashboard_data["charts"].append({
+                                    "id": chart_id,
                                     "type": chart_type,
                                     "title": title,
                                     "xAxis": x_col,

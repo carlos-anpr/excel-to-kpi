@@ -206,7 +206,7 @@ function App() {
               />
             )}
 
-            <DashboardView data={dashboardData} />
+            <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
           </div>
         )}
       </main>
