@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, ArrowRight, BarChart2 } from 'lucide-react';
+import { FileText, ArrowRight, BarChart2, Trash2 } from 'lucide-react';
 import { FileUploader } from './FileUploader';
 
 interface FileRecord {
@@ -11,12 +11,13 @@ interface FileRecord {
 interface FileListProps {
   files: FileRecord[];
   onSelect: (fileId: string) => void;
+  onDelete: (fileId: string) => void;
   onNewUpload: () => void;
   onFileSelect: (file: File) => void;
   isUploading: boolean;
 }
 
-export const FileList: React.FC<FileListProps> = ({ files, onSelect, onNewUpload, onFileSelect, isUploading }) => {
+export const FileList: React.FC<FileListProps> = ({ files, onSelect, onDelete, onNewUpload, onFileSelect, isUploading }) => {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-8">
@@ -44,7 +45,7 @@ export const FileList: React.FC<FileListProps> = ({ files, onSelect, onNewUpload
             <div 
               key={file.id}
               onClick={() => onSelect(file.id)}
-              className="group bg-white p-6 rounded-xl border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer flex justify-between items-center"
+              className="group bg-white p-6 rounded-xl border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer flex justify-between items-center relative"
             >
               <div className="flex items-center gap-4">
                 <div className={`p-3 rounded-lg ${file.column_mapping ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
@@ -59,7 +60,20 @@ export const FileList: React.FC<FileListProps> = ({ files, onSelect, onNewUpload
                   </p>
                 </div>
               </div>
-              <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 transition-colors" />
+              
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if(confirm('¿Estás seguro de eliminar este archivo?')) onDelete(file.id);
+                  }}
+                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                  title="Eliminar archivo"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 transition-colors" />
+              </div>
             </div>
           ))}
         </div>

@@ -24,14 +24,19 @@ const COLORS = {
   purple: ['#8b5cf6', '#a78bfa', '#c4b5fd'],
   orange: ['#f59e0b', '#fbbf24', '#fcd34d'],
   red: ['#ef4444', '#f87171', '#fca5a5'],
+  mixed: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1']
 };
 
 export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
   const [type, setType] = useState<'line' | 'bar' | 'area' | 'pie'>(chart.type as any || 'bar');
-  const [colorTheme, setColorTheme] = useState<keyof typeof COLORS>('blue');
+  
+  // Auto-detect if we should use mixed colors (if there are many series)
+  const dataKeys = chart.lines || chart.bars || [];
+  const defaultTheme = dataKeys.length > 1 ? 'mixed' : 'blue';
+  
+  const [colorTheme, setColorTheme] = useState<keyof typeof COLORS>(defaultTheme);
   const [showSettings, setShowSettings] = useState(false);
 
-  const dataKeys = chart.lines || chart.bars || [];
   const currentColors = COLORS[colorTheme];
   const isPieDisabled = chart.data.length > 10;
 
@@ -97,7 +102,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
           <AreaChart {...commonProps}>
             <defs>
               {dataKeys.map((key, i) => (
-                <linearGradient key={key} id={`color${key}`} x1="0" y1="0" x2="0" y2="1">
+                <linearGradient key={key} id={`color-${i}`} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={currentColors[i % currentColors.length]} stopOpacity={0.3}/>
                   <stop offset="95%" stopColor={currentColors[i % currentColors.length]} stopOpacity={0}/>
                 </linearGradient>
@@ -118,7 +123,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
                 dataKey={key} 
                 stroke={currentColors[i % currentColors.length]} 
                 fillOpacity={1} 
-                fill={`url(#color${key})`} 
+                fill={`url(#color-${i})`} 
               />
             ))}
           </AreaChart>
@@ -209,14 +214,18 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart }) => {
 
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-2">Color del Tema</label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {(Object.keys(COLORS) as Array<keyof typeof COLORS>).map((color) => (
                 <button
                   key={color}
                   onClick={() => setColorTheme(color)}
                   className={`w-6 h-6 rounded-full border-2 transition-all ${colorTheme === color ? 'border-gray-400 scale-110' : 'border-transparent hover:scale-110'}`}
-                  style={{ backgroundColor: COLORS[color][0] }}
-                  title={color}
+                  style={{ 
+                    background: color === 'mixed' 
+                      ? 'linear-gradient(135deg, #3b82f6 0%, #ef4444 50%, #10b981 100%)' 
+                      : COLORS[color][0] 
+                  }}
+                  title={color === 'mixed' ? 'Multicolor' : color}
                 />
               ))}
             </div>

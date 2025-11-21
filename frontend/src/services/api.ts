@@ -42,3 +42,13 @@ export const saveAlerts = async (fileId: string, rules: any[]) => {
   const response = await axios.post(`${API_URL}/files/${fileId}/alerts`, rules);
   return response.data;
 };
+
+export const deleteFile = async (fileId: string) => {
+  const response = await axios.delete(`${API_URL}/files/${fileId}`);
+  return response.data;
+};
+
+export const getFilePreview = async (fileId: string): Promise<UploadResponse> => {
+  const response = await axios.get<UploadResponse>(`${API_URL}/files/${fileId}/preview`);
+  return response.data;
+};

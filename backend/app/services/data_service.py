@@ -20,6 +20,19 @@ class DataService:
         return file_id
 
     @staticmethod
+    def delete_file(file_id: str) -> bool:
+        """Elimina el archivo físico del disco."""
+        for f in os.listdir(UPLOAD_DIR):
+            if f.startswith(file_id):
+                file_path = os.path.join(UPLOAD_DIR, f)
+                try:
+                    os.remove(file_path)
+                    return True
+                except OSError:
+                    return False
+        return False
+
+    @staticmethod
     def get_preview(file_id: str) -> dict:
         """Lee el archivo guardado y devuelve una previsualización (primeras 5 filas)."""
         # Buscar el archivo con ese ID (puede ser .csv o .xlsx)
@@ -75,10 +88,8 @@ class DataService:
             else:
                 df = pd.read_excel(found_file)
             
-            # Identificar columnas por tipo
-            date_col = next((k for k, v in mapping.items() if v == 'date'), None)
-            cat_cols = [k for k, v in mapping.items() if v == 'category']
-            num_cols = [k for k, v in mapping.items() if v == 'number']
+            # Identificar si es configuración nueva (DashboardBuilder) o antigua (Mapeo simple)
+            is_new_config = "charts" in mapping and isinstance(mapping["charts"], list)
 
             dashboard_data = {
                 "kpis": [],
@@ -86,56 +97,157 @@ class DataService:
                 "alerts": []
             }
 
-            # 1. Generar KPIs (Suma total de columnas numéricas)
-            for col in num_cols:
-                if col in df.columns:
-                    total = float(df[col].sum())
-                    dashboard_data["kpis"].append({
-                        "label": f"Total {col}",
-                        "value": total,
-                        "type": "sum"
-                    })
+            if is_new_config:
+                # --- LÓGICA NUEVA (DashboardBuilder) ---
+                kpi_cols = mapping.get("kpis", [])
+                charts_config = mapping.get("charts", [])
 
-            # 2. Generar Gráfico de Línea (Tendencia Temporal)
-            if date_col and num_cols:
-                # Intentar convertir a datetime
-                try:
-                    df[date_col] = pd.to_datetime(df[date_col])
-                    # Agrupar por mes (o fecha si son pocas)
-                    # Para simplificar MVP: Agrupar por fecha tal cual y ordenar
-                    trend_df = df.groupby(date_col)[num_cols].sum().reset_index()
-                    trend_df = trend_df.sort_values(date_col)
-                    
-                    # Formatear fecha a string para JSON
-                    trend_df[date_col] = trend_df[date_col].dt.strftime('%Y-%m-%d')
-                    
-                    dashboard_data["charts"].append({
-                        "type": "line",
-                        "title": f"Tendencia por {date_col}",
-                        "xAxis": date_col,
-                        "data": trend_df.to_dict(orient="records"),
-                        "lines": num_cols
-                    })
-                except Exception as e:
-                    print(f"No se pudo procesar fechas: {e}")
+                # 1. Generar KPIs
+                for col in kpi_cols:
+                    if col in df.columns:
+                        # Intentar limpiar y convertir a numérico si es necesario
+                        try:
+                            total = pd.to_numeric(df[col], errors='coerce').sum()
+                            dashboard_data["kpis"].append({
+                                "label": f"Total {col}",
+                                "value": float(total) if pd.notnull(total) else 0,
+                                "type": "sum"
+                            })
+                        except:
+                            pass
 
-            # 3. Generar Gráficos de Barras (Por Categoría)
-            for cat_col in cat_cols:
-                if cat_col in df.columns and num_cols:
-                    # Top 10 categorías por la primera métrica numérica
-                    metric = num_cols[0] 
-                    bar_df = df.groupby(cat_col)[metric].sum().reset_index()
-                    bar_df = bar_df.sort_values(metric, ascending=False).head(10)
-                    
-                    dashboard_data["charts"].append({
-                        "type": "bar",
-                        "title": f"{metric} por {cat_col}",
-                        "xAxis": cat_col,
-                        "data": bar_df.to_dict(orient="records"),
-                        "bars": [metric]
-                    })
+                # 2. Generar Gráficos Configurados
+                for chart in charts_config:
+                    x_col = chart.get("xAxis")
+                    y_cols = chart.get("yAxis", [])
+                    breakdown_col = chart.get("breakdown")
+                    title = chart.get("title", "Gráfico")
 
-            # 4. Evaluar Alertas
+                    if x_col and y_cols and x_col in df.columns:
+                        try:
+                            # Asegurar que las columnas Y sean numéricas
+                            for y_col in y_cols:
+                                df[y_col] = pd.to_numeric(df[y_col], errors='coerce')
+
+                            # Si X parece fecha, intentar ordenar cronológicamente
+                            is_date = False
+                            try:
+                                if df[x_col].dtype == 'object':
+                                    df[x_col] = pd.to_datetime(df[x_col])
+                                    is_date = True
+                            except:
+                                pass 
+
+                            if breakdown_col and breakdown_col in df.columns:
+                                # --- LÓGICA DE AGRUPACIÓN (BREAKDOWN) ---
+                                # Agrupar por [X, Breakdown] y sumar la primera métrica Y
+                                metric = y_cols[0]
+                                grouped_df = df.groupby([x_col, breakdown_col])[metric].sum().reset_index()
+                                
+                                # Pivotar para que los valores de breakdown sean columnas
+                                pivot_df = grouped_df.pivot(index=x_col, columns=breakdown_col, values=metric).reset_index()
+                                pivot_df = pivot_df.fillna(0)
+                                
+                                # Las nuevas series son las columnas pivotadas (excluyendo x_col)
+                                new_series = [c for c in pivot_df.columns if c != x_col]
+                                
+                                if is_date:
+                                    pivot_df = pivot_df.sort_values(x_col)
+                                    pivot_df[x_col] = pivot_df[x_col].dt.strftime('%Y-%m-%d')
+                                
+                                dashboard_data["charts"].append({
+                                    "type": "bar", # Default a barras apiladas o agrupadas
+                                    "title": f"{title} (por {breakdown_col})",
+                                    "xAxis": x_col,
+                                    "data": pivot_df.to_dict(orient="records"),
+                                    "bars": new_series # Usamos 'bars' para que ChartCard las pinte
+                                })
+                                
+                            else:
+                                # --- LÓGICA SIMPLE (SIN AGRUPACIÓN) ---
+                                grouped_df = df.groupby(x_col)[y_cols].sum().reset_index()
+                                
+                                if is_date:
+                                    grouped_df = grouped_df.sort_values(x_col)
+                                    grouped_df[x_col] = grouped_df[x_col].dt.strftime('%Y-%m-%d')
+                                else:
+                                    grouped_df = grouped_df.sort_values(y_cols[0], ascending=False).head(20)
+
+                                # Determinar tipo por defecto (Línea si es fecha, Barra si no)
+                                # Si el nombre de la columna sugiere fecha, forzar línea
+                                x_col_lower = x_col.lower()
+                                date_keywords = ['date', 'fecha', 'time', 'tiempo', 'year', 'año', 'month', 'mes', 'day', 'dia']
+                                is_date_by_name = any(k in x_col_lower for k in date_keywords)
+                                
+                                chart_type = "line" if (is_date or is_date_by_name) else "bar"
+
+                                dashboard_data["charts"].append({
+                                    "type": chart_type,
+                                    "title": title,
+                                    "xAxis": x_col,
+                                    "data": grouped_df.to_dict(orient="records"),
+                                    "lines": y_cols if chart_type == "line" else None,
+                                    "bars": y_cols if chart_type == "bar" else None
+                                })
+                        except Exception as e:
+                            print(f"Error generando gráfico {title}: {e}")
+
+            else:
+                # --- LÓGICA ANTIGUA (Retrocompatibilidad) ---
+                date_col = next((k for k, v in mapping.items() if v == 'date'), None)
+                cat_cols = [k for k, v in mapping.items() if v == 'category']
+                num_cols = [k for k, v in mapping.items() if v == 'number']
+
+                # 1. Generar KPIs (Suma total de columnas numéricas)
+                for col in num_cols:
+                    if col in df.columns:
+                        total = float(df[col].sum())
+                        dashboard_data["kpis"].append({
+                            "label": f"Total {col}",
+                            "value": total,
+                            "type": "sum"
+                        })
+
+                # 2. Generar Gráfico de Línea (Tendencia Temporal)
+                if date_col and num_cols:
+                    # Intentar convertir a datetime
+                    try:
+                        df[date_col] = pd.to_datetime(df[date_col])
+                        # Agrupar por mes (o fecha si son pocas)
+                        # Para simplificar MVP: Agrupar por fecha tal cual y ordenar
+                        trend_df = df.groupby(date_col)[num_cols].sum().reset_index()
+                        trend_df = trend_df.sort_values(date_col)
+                        
+                        # Formatear fecha a string para JSON
+                        trend_df[date_col] = trend_df[date_col].dt.strftime('%Y-%m-%d')
+                        
+                        dashboard_data["charts"].append({
+                            "type": "line",
+                            "title": f"Tendencia por {date_col}",
+                            "xAxis": date_col,
+                            "data": trend_df.to_dict(orient="records"),
+                            "lines": num_cols
+                        })
+                    except Exception as e:
+                        print(f"No se pudo procesar fechas: {e}")
+
+                # 3. Generar Gráficos de Barras (Por Categoría)
+                for cat_col in cat_cols:
+                    if cat_col in df.columns and num_cols:
+                        # Top 10 categorías por la primera métrica numérica
+                        metric = num_cols[0] 
+                        bar_df = df.groupby(cat_col)[metric].sum().reset_index()
+                        bar_df = bar_df.sort_values(metric, ascending=False).head(10)
+                        
+                        dashboard_data["charts"].append({
+                            "type": "bar",
+                            "title": f"{metric} por {cat_col}",
+                            "xAxis": cat_col,
+                            "data": bar_df.to_dict(orient="records"),
+                            "bars": [metric]
+                        })
+
+            # 4. Evaluar Alertas (Común para ambos)
             if alert_rules:
                 for rule in alert_rules:
                     column = rule.get("column")

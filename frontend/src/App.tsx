@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
-import { FileUploader } from './components/FileUploader'
-import { PreviewTable } from './components/PreviewTable'
-import { ColumnMapper } from './components/ColumnMapper'
-import { DashboardView } from './components/DashboardView'
+import { DashboardBuilder } from './components/DashboardBuilder'
 import { FileList } from './components/FileList'
+import { FileUploader } from './components/FileUploader'
 import { AlertConfig } from './components/AlertConfig'
-import { uploadFile, saveMapping, getFiles, getDashboard, saveAlerts, UploadResponse } from './services/api'
+import { DashboardView } from './components/DashboardView'
+import { uploadFile, saveMapping, getFiles, getDashboard, saveAlerts, deleteFile, getFilePreview, UploadResponse } from './services/api'
 import { LayoutDashboard, ArrowLeft, Settings } from 'lucide-react'
 
 type ViewState = 'list' | 'upload' | 'mapping' | 'dashboard';
@@ -52,24 +51,44 @@ function App() {
     }
   };
 
-  const handleMappingConfirm = async (mapping: Record<string, string>) => {
+  const handleMappingConfirm = async (config: any) => {
     if (!currentFileId) return;
     try {
-      await saveMapping(currentFileId, mapping);
+      // config ahora es { kpis: [], charts: [] }
+      await saveMapping(currentFileId, config);
       await loadDashboard(currentFileId);
     } catch (err) {
       console.error(err);
-      alert("Error al guardar el mapeo");
+      alert("Error al guardar la configuración");
     }
   };
 
   const handleExistingFileSelect = async (fileId: string) => {
     const file = files.find(f => f.id === fileId);
     setCurrentFileId(fileId);
+    
     if (file?.column_mapping) {
       await loadDashboard(fileId);
     } else {
-      alert("Este archivo está pendiente de mapeo. Por favor, súbelo de nuevo para mapearlo (Mejora pendiente).");
+      // Si no tiene mapeo, cargar preview y volver al builder
+      try {
+        const previewData = await getFilePreview(fileId);
+        setCurrentFile(previewData);
+        setView('mapping');
+      } catch (err) {
+        console.error(err);
+        alert("Error al recuperar el archivo para mapeo.");
+      }
+    }
+  };
+
+  const handleDeleteFile = async (fileId: string) => {
+    try {
+      await deleteFile(fileId);
+      await loadFiles(); // Recargar lista
+    } catch (err) {
+      console.error(err);
+      alert("Error al eliminar el archivo");
     }
   };
 
@@ -123,6 +142,7 @@ function App() {
           <FileList 
             files={files} 
             onSelect={handleExistingFileSelect} 
+            onDelete={handleDeleteFile}
             onNewUpload={() => setView('upload')}
             onFileSelect={handleFileSelect}
             isUploading={isUploading}
@@ -142,18 +162,14 @@ function App() {
 
         {view === 'mapping' && currentFile && (
           <div className="animate-in fade-in slide-in-from-bottom-4">
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold mb-2">Configura tu Dashboard</h2>
-              <p className="text-gray-500">Archivo: {currentFile.filename}</p>
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold mb-2">Diseña tu Dashboard</h2>
+              <p className="text-gray-500">Arrastra las columnas para crear tus gráficos y KPIs.</p>
             </div>
             
-            <div className="bg-white p-6 rounded-lg shadow-sm border mb-8">
-              <h3 className="font-semibold mb-4">Vista Previa</h3>
-              <PreviewTable data={currentFile.preview} columns={currentFile.columns} />
-            </div>
-
-            <ColumnMapper 
+            <DashboardBuilder 
               columns={currentFile.columns} 
+              previewData={currentFile.preview}
               onConfirm={handleMappingConfirm} 
             />
           </div>

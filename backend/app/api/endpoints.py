@@ -31,8 +31,35 @@ async def upload_file(file: UploadFile = File(...), session: Session = Depends(g
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/files/{file_id}/preview")
+async def get_file_preview(file_id: str, session: Session = Depends(get_session)):
+    file_record = session.get(FileRecord, file_id)
+    if not file_record:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    
+    try:
+        preview_data = DataService.get_preview(file_id)
+        return preview_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/files/{file_id}")
+async def delete_file(file_id: str, session: Session = Depends(get_session)):
+    file_record = session.get(FileRecord, file_id)
+    if not file_record:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    
+    # Eliminar archivo físico
+    DataService.delete_file(file_id)
+    
+    # Eliminar registro de BD
+    session.delete(file_record)
+    session.commit()
+    
+    return {"message": "Archivo eliminado correctamente"}
+
 @router.post("/files/{file_id}/map")
-async def map_columns(file_id: str, mapping: Dict[str, str], session: Session = Depends(get_session)):
+async def map_columns(file_id: str, mapping: Dict, session: Session = Depends(get_session)):
     file_record = session.get(FileRecord, file_id)
     if not file_record:
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
