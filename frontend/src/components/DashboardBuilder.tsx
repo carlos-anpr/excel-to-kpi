@@ -94,11 +94,11 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
   const [kpis, setKpis] = useState<string[]>(() => initialConfig?.kpis || []);
   const [charts, setCharts] = useState<ChartConfig[]>(() => {
     if (initialConfig?.charts) {
-      return initialConfig.charts.map((c: any) => ({
-        id: c.id,
-        name: c.title,
+      return initialConfig.charts.map((c: any, index: number) => ({
+        id: c.id || Date.now() + index,
+        name: c.title || `Gráfico ${index + 1}`,
         xAxis: c.xAxis,
-        yAxis: c.yAxis,
+        yAxis: c.yAxis || [],
         breakdown: c.breakdown
       }));
     }
@@ -175,9 +175,8 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
   };
 
   const addChart = () => {
-    const maxId = charts.length > 0 ? Math.max(...charts.map(c => c.id || 0)) : 0;
-    const newId = maxId + 1;
-    setCharts([...charts, { id: newId, name: `Gráfico ${newId}`, xAxis: null, yAxis: [], breakdown: null }]);
+    const newId = Date.now();
+    setCharts([...charts, { id: newId, name: `Gráfico ${charts.length + 1}`, xAxis: null, yAxis: [], breakdown: null }]);
   };
 
   const removeChart = (id: number) => {
@@ -264,6 +263,14 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
 
                 {/* Chart Config Grid */}
                 <div className="p-3 space-y-3">
+                  {/* Validation Warning */}
+                  {(!chart.xAxis || chart.yAxis.length === 0) && (
+                    <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200 flex items-center gap-1">
+                      <span className="font-bold">!</span> 
+                      {!chart.xAxis ? "Falta Eje X (Categoría)" : "Falta Métrica (Valor numérico)"}
+                    </div>
+                  )}
+
                   {/* X Axis Row */}
                   <div className="grid grid-cols-[80px_1fr] items-center gap-2">
                     <label className="text-xs font-medium text-gray-500">Eje X</label>
@@ -281,7 +288,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
                           </div>
                         ) : (
                           <div className="text-xs text-gray-400 border border-dashed border-gray-300 rounded px-2 py-1.5 cursor-pointer hover:border-blue-400 hover:text-blue-500">
-                            Seleccionar...
+                            Seleccionar Categoría...
                           </div>
                         )
                       }
@@ -291,7 +298,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
                   {/* Y Axis Row */}
                   <div className="grid grid-cols-[80px_1fr] items-start gap-2">
                     <label className="text-xs font-medium text-gray-500 mt-1.5">Métricas</label>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1.5 w-full">
                       {chart.yAxis.map(col => (
                         <div key={col} className="bg-purple-50 px-2 py-1 rounded border border-purple-200 text-purple-700 text-xs flex items-center gap-1">
                           <span className="truncate max-w-[80px]">{col}</span>
@@ -302,9 +309,15 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
                         columns={columns} 
                         onSelect={(col) => handleDirectAdd('yAxis', col, chart.id)}
                         trigger={
-                          <button className="w-6 h-6 flex items-center justify-center rounded border border-dashed border-gray-300 text-gray-400 hover:border-purple-400 hover:text-purple-600 transition-colors">
-                            <Plus className="w-3 h-3" />
-                          </button>
+                          chart.yAxis.length === 0 ? (
+                             <div className="text-xs text-gray-400 border border-dashed border-gray-300 rounded px-2 py-1.5 cursor-pointer hover:border-purple-400 hover:text-purple-500 flex items-center gap-1 w-full">
+                                <Plus className="w-3 h-3" /> Añadir Valor...
+                             </div>
+                          ) : (
+                            <button className="w-6 h-6 flex items-center justify-center rounded border border-dashed border-gray-300 text-gray-400 hover:border-purple-400 hover:text-purple-600 transition-colors">
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          )
                         }
                       />
                     </div>
@@ -312,7 +325,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
 
                   {/* Breakdown Row */}
                   <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-                    <label className="text-xs font-medium text-gray-500">Agrupar</label>
+                    <label className="text-xs font-medium text-gray-500">Desglose</label>
                     <ColumnSelector 
                       columns={columns} 
                       onSelect={(col) => handleDirectAdd('breakdown', col, chart.id)}
@@ -327,7 +340,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
                           </div>
                         ) : (
                           <div className="text-xs text-gray-400 border border-dashed border-gray-300 rounded px-2 py-1.5 cursor-pointer hover:border-orange-400 hover:text-orange-500">
-                            Opcional...
+                            Opcional (Color)...
                           </div>
                         )
                       }
