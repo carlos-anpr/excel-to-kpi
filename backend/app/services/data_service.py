@@ -174,17 +174,19 @@ class DataService:
                                 if y_col in chart_df.columns:
                                     chart_df[y_col] = pd.to_numeric(chart_df[y_col], errors='coerce')
 
-                            # Si X parece fecha, intentar ordenar cronológicamente
+                            # --- DETECCIÓN DE TIPOS DE EJE X ---
                             is_date = False
+                            is_numeric_x = False
+                            
                             try:
-                                # Check if it's already datetime-like
-                                if pd.api.types.is_datetime64_any_dtype(chart_df[x_col]):
+                                if pd.api.types.is_numeric_dtype(chart_df[x_col]):
+                                    is_numeric_x = True
+                                    # No convertimos numéricos a fecha para evitar errores con "Month Number" etc.
+                                elif pd.api.types.is_datetime64_any_dtype(chart_df[x_col]):
                                     is_date = True
                                 else:
-                                    # Try to convert to datetime
-                                    # errors='coerce' will turn unparseable data into NaT
+                                    # Es string/object, intentamos convertir a fecha
                                     temp_series = pd.to_datetime(chart_df[x_col], errors='coerce')
-                                    # If we have at least some valid dates (not all NaT), treat as date
                                     if not temp_series.isna().all():
                                         chart_df[x_col] = temp_series
                                         is_date = True
@@ -214,6 +216,8 @@ class DataService:
                                     pivot_df = pivot_df.sort_values(x_col)
                                     # Convert to string for JSON serialization
                                     pivot_df[x_col] = pivot_df[x_col].dt.strftime('%Y-%m-%d')
+                                elif is_numeric_x:
+                                    pivot_df = pivot_df.sort_values(x_col).head(50)
                                 
                                 dashboard_data["charts"].append({
                                     "id": chart_id,
@@ -235,6 +239,8 @@ class DataService:
                                 if is_date:
                                     grouped_df = grouped_df.sort_values(x_col)
                                     grouped_df[x_col] = grouped_df[x_col].dt.strftime('%Y-%m-%d')
+                                elif is_numeric_x:
+                                    grouped_df = grouped_df.sort_values(x_col).head(50)
                                 else:
                                     grouped_df = grouped_df.sort_values(y_cols[0], ascending=False).head(20)
 
