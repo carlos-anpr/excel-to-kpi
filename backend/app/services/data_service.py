@@ -135,24 +135,35 @@ class DataService:
 
                     if x_col and y_cols and x_col in df.columns:
                         try:
-                            # Asegurar que las columnas Y sean numéricas
+                            # Crear una copia de trabajo con solo las columnas necesarias para no corromper el DF original
+                            needed_cols = [x_col] + [col for col in y_cols if col in df.columns]
+                            if breakdown_col and breakdown_col in df.columns:
+                                needed_cols.append(breakdown_col)
+                            
+                            # Eliminar duplicados en needed_cols
+                            needed_cols = list(set(needed_cols))
+                            
+                            chart_df = df[needed_cols].copy()
+
+                            # Asegurar que las columnas Y sean numéricas en la copia
                             for y_col in y_cols:
-                                df[y_col] = pd.to_numeric(df[y_col], errors='coerce')
+                                if y_col in chart_df.columns:
+                                    chart_df[y_col] = pd.to_numeric(chart_df[y_col], errors='coerce')
 
                             # Si X parece fecha, intentar ordenar cronológicamente
                             is_date = False
                             try:
-                                if df[x_col].dtype == 'object':
-                                    df[x_col] = pd.to_datetime(df[x_col])
+                                if chart_df[x_col].dtype == 'object':
+                                    chart_df[x_col] = pd.to_datetime(chart_df[x_col])
                                     is_date = True
                             except:
                                 pass 
 
-                            if breakdown_col and breakdown_col in df.columns:
+                            if breakdown_col and breakdown_col in chart_df.columns:
                                 # --- LÓGICA DE AGRUPACIÓN (BREAKDOWN) ---
                                 # Agrupar por [X, Breakdown] y sumar la primera métrica Y
                                 metric = y_cols[0]
-                                grouped_df = df.groupby([x_col, breakdown_col])[metric].sum().reset_index()
+                                grouped_df = chart_df.groupby([x_col, breakdown_col])[metric].sum().reset_index()
                                 
                                 # Pivotar para que los valores de breakdown sean columnas
                                 pivot_df = grouped_df.pivot(index=x_col, columns=breakdown_col, values=metric).reset_index()
@@ -176,7 +187,7 @@ class DataService:
                                 
                             else:
                                 # --- LÓGICA SIMPLE (SIN AGRUPACIÓN) ---
-                                grouped_df = df.groupby(x_col)[y_cols].sum().reset_index()
+                                grouped_df = chart_df.groupby(x_col)[y_cols].sum().reset_index()
                                 
                                 if is_date:
                                     grouped_df = grouped_df.sort_values(x_col)

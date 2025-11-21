@@ -106,6 +106,26 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
   });
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(true);
+  const prevChartsLength = useRef(charts.length);
+
+  // Scroll to new chart when added
+  useEffect(() => {
+    if (charts.length > prevChartsLength.current) {
+      setTimeout(() => {
+        const lastChart = charts[charts.length - 1];
+        if (lastChart) {
+          const element = document.getElementById(`chart-${lastChart.id}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Add a highlight effect
+            element.classList.add('ring-2', 'ring-blue-500');
+            setTimeout(() => element.classList.remove('ring-2', 'ring-blue-500'), 2000);
+          }
+        }
+      }, 100);
+    }
+    prevChartsLength.current = charts.length;
+  }, [charts]);
 
   // Effect to trigger onChange whenever state changes
   React.useEffect(() => {
@@ -245,7 +265,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
             </div>
 
             {charts.map((chart) => (
-              <div key={chart.id} className="bg-white rounded-xl border border-gray-200 shadow-sm">
+              <div key={chart.id} id={`chart-${chart.id}`} className="bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-300">
                 {/* Chart Header */}
                 <div className="bg-gray-50 px-3 py-2 border-b border-gray-100 flex justify-between items-center">
                   <input 
@@ -439,7 +459,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
             </div>
 
             {charts.map((chart) => (
-              <div key={chart.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 relative group">
+              <div key={chart.id} id={`chart-${chart.id}`} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 relative group transition-all duration-300">
                 <div className="flex justify-between mb-4">
                   <input 
                     value={chart.name}
