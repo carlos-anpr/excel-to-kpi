@@ -14,7 +14,16 @@ export const PreviewTable: React.FC<PreviewTableProps> = ({ data, columns }) => 
         <thead className="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0 z-10 shadow-sm">
           <tr>
             {columns.map((col) => (
-              <th key={col} className="px-6 py-3 font-bold bg-gray-50">
+              <th 
+                key={col} 
+                className="px-6 py-3 font-bold bg-gray-50 cursor-grab active:cursor-grabbing hover:bg-gray-100 select-none"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/plain', col);
+                  e.dataTransfer.effectAllowed = 'copy';
+                }}
+                title="Arrastra esta columna para mapearla"
+              >
                 {col}
               </th>
             ))}

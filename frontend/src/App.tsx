@@ -6,7 +6,7 @@ import { AlertConfig } from './components/AlertConfig'
 import { DashboardView } from './components/DashboardView'
 import { PreviewTable } from './components/PreviewTable'
 import { uploadFile, saveMapping, getFiles, getDashboard, saveAlerts, deleteFile, getFilePreview, UploadResponse, getDashboardPreview } from './services/api'
-import { LayoutDashboard, ArrowLeft, Settings, Edit, Check } from 'lucide-react'
+import { LayoutDashboard, ArrowLeft, Settings, Edit, Check, BarChart2, Table as TableIcon } from 'lucide-react'
 
 type ViewState = 'list' | 'upload' | 'mapping' | 'dashboard';
 
@@ -22,6 +22,7 @@ function App() {
   const [initialMapping, setInitialMapping] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [currentConfig, setCurrentConfig] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'data'>('dashboard');
 
   // Cargar lista de archivos al inicio
   useEffect(() => {
@@ -84,6 +85,7 @@ function App() {
   const handleExistingFileSelect = async (fileId: string) => {
     const file = files.find(f => f.id === fileId);
     setCurrentFileId(fileId);
+    setActiveTab('dashboard');
     
     if (file?.column_mapping) {
       await loadDashboard(fileId);
@@ -157,6 +159,18 @@ function App() {
     } catch (err) {
       console.error(err);
       alert("Error guardando alertas");
+    }
+  };
+
+  const handleShowDataTab = async () => {
+    setActiveTab('data');
+    if (currentFileId && (!currentFile || currentFile.file_id !== currentFileId)) {
+      try {
+        const data = await getFilePreview(currentFileId);
+        setCurrentFile(data);
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
@@ -295,7 +309,7 @@ function App() {
               </div>
             ) : (
               <>
-                <div className="flex justify-between items-end mb-8">
+                <div className="flex justify-between items-end mb-6">
                   <div>
                     <h2 className="text-3xl font-bold text-gray-900">Dashboard de Resultados</h2>
                     <p className="text-gray-500 mt-1">Visualización generada automáticamente</p>
@@ -324,14 +338,52 @@ function App() {
                   </div>
                 </div>
 
-                {showConfig && (
-                  <AlertConfig 
-                    columns={dashboardData.kpis.map((k: any) => k.label.replace('Total ', ''))} 
-                    onSave={handleSaveAlerts} 
-                  />
-                )}
+                {/* Tabs */}
+                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg w-fit mb-6">
+                    <button
+                        onClick={() => setActiveTab('dashboard')}
+                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'dashboard' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <BarChart2 className="w-4 h-4" />
+                        Dashboard
+                    </button>
+                    <button
+                        onClick={handleShowDataTab}
+                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'data' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <TableIcon className="w-4 h-4" />
+                        Datos
+                    </button>
+                </div>
 
-                <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
+                {activeTab === 'dashboard' ? (
+                    <>
+                        {showConfig && (
+                        <AlertConfig 
+                            columns={dashboardData.kpis.map((k: any) => k.label.replace('Total ', ''))} 
+                            onSave={handleSaveAlerts} 
+                        />
+                        )}
+
+                        <DashboardView data={dashboardData} fileId={currentFileId || undefined} />
+                    </>
+                ) : (
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 min-h-[400px]">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-bold text-gray-800">Datos Fuente</h3>
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                {currentFile ? `${currentFile.total_rows} filas totales` : 'Cargando...'}
+                            </span>
+                        </div>
+                        {currentFile ? (
+                            <PreviewTable data={currentFile.preview} columns={currentFile.columns} />
+                        ) : (
+                            <div className="flex items-center justify-center h-64 text-gray-400">
+                                Cargando datos...
+                            </div>
+                        )}
+                    </div>
+                )}
               </>
             )}
           </div>
