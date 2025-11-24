@@ -5,8 +5,9 @@ import { FileUploader } from './components/FileUploader'
 import { AlertConfig } from './components/AlertConfig'
 import { DashboardView } from './components/DashboardView'
 import { PreviewTable } from './components/PreviewTable'
+import { InsightsPanel } from './components/InsightsPanel'
 import { uploadFile, saveMapping, getFiles, getDashboard, saveAlerts, deleteFile, getFilePreview, UploadResponse, getDashboardPreview } from './services/api'
-import { LayoutDashboard, ArrowLeft, Settings, Edit, Check, BarChart2, Table as TableIcon } from 'lucide-react'
+import { LayoutDashboard, ArrowLeft, Settings, Edit, Check, BarChart2, Table as TableIcon, Lightbulb } from 'lucide-react'
 
 type ViewState = 'list' | 'upload' | 'mapping' | 'dashboard';
 
@@ -22,7 +23,7 @@ function App() {
   const [initialMapping, setInitialMapping] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [currentConfig, setCurrentConfig] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'data'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'data' | 'insights'>('dashboard');
   const [editTab, setEditTab] = useState<'preview' | 'data'>('preview');
 
   // Cargar lista de archivos al inicio
@@ -443,6 +444,13 @@ function App() {
                         Dashboard
                     </button>
                     <button
+                        onClick={() => setActiveTab('insights')}
+                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'insights' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Lightbulb className="w-4 h-4" />
+                        Insights
+                    </button>
+                    <button
                         onClick={handleShowDataTab}
                         className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'data' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
@@ -466,6 +474,8 @@ function App() {
                             onReorder={handleChartReorder}
                         />
                     </>
+                ) : activeTab === 'insights' ? (
+                    currentFileId && <InsightsPanel fileId={currentFileId} />
                 ) : (
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 min-h-[400px]">
                         <div className="flex justify-between items-center mb-4">
