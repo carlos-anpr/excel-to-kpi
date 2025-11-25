@@ -156,6 +156,8 @@ class DataService:
                     breakdown_col = chart.get("breakdown")
                     title = chart.get("title", "Gráfico")
                     order = chart.get("order", 0)
+                    orientation = chart.get("orientation", "vertical")
+                    col_span = chart.get("colSpan", 1)
 
                     if x_col and y_cols and x_col in df.columns:
                         try:
@@ -226,7 +228,9 @@ class DataService:
                                     "xAxis": x_col,
                                     "data": pivot_df.to_dict(orient="records"),
                                     "bars": new_series, # Usamos 'bars' para que ChartCard las pinte
-                                    "order": order
+                                    "order": order,
+                                    "orientation": orientation,
+                                    "colSpan": col_span
                                 })
                                 
                             else:
@@ -260,7 +264,9 @@ class DataService:
                                     "data": grouped_df.to_dict(orient="records"),
                                     "lines": y_cols if chart_type == "line" else None,
                                     "bars": y_cols if chart_type == "bar" else None,
-                                    "order": order
+                                    "order": order,
+                                    "orientation": orientation,
+                                    "colSpan": col_span
                                 })
                         except Exception as e:
                             print(f"Error generando gráfico {title}: {e}")

@@ -16,6 +16,8 @@ interface DashboardData {
     lines?: string[];
     bars?: string[];
     order?: number;
+    orientation?: 'vertical' | 'horizontal';
+    colSpan?: 1 | 2;
   }[];
   alerts?: {
     rule: string;
@@ -126,7 +128,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, fileId, onRe
                 onDragEnd={handleDragEnd}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => handleDrop(e, idx)}
-                className={`transition-all duration-300 ${draggedIndex === idx ? 'opacity-50 scale-95' : ''} ${onReorder ? 'cursor-move' : ''}`}
+                className={`transition-all duration-300 ${draggedIndex === idx ? 'opacity-50 scale-95' : ''} ${onReorder ? 'cursor-move' : ''} ${chart.colSpan === 2 ? 'lg:col-span-2' : ''}`}
             >
                 <ChartCard chart={chart} fileId={fileId} index={idx} />
             </div>

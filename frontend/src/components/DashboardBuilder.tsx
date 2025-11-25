@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, X, BarChart2, Trash2, GripVertical, Eye, EyeOff, Search, ChevronDown, PlusCircle } from 'lucide-react';
+import { Plus, X, BarChart2, Trash2, GripVertical, Eye, EyeOff, Search, ChevronDown, PlusCircle, Sparkles, Loader2, AlignVerticalSpaceAround, AlignHorizontalSpaceAround, RectangleHorizontal, Square } from 'lucide-react';
+import { getNextRecommendation, ChartRecommendation, KPIRecommendation } from '../services/api';
 
 interface DashboardBuilderProps {
   columns: string[];
@@ -8,6 +9,7 @@ interface DashboardBuilderProps {
   initialConfig?: any;
   onChange?: (config: any) => void;
   compact?: boolean;
+  fileId?: string; // Needed for AI recommendations
 }
 
 interface ChartConfig {
@@ -17,6 +19,8 @@ interface ChartConfig {
   yAxis: string[];
   breakdown: string | null;
   order: number;
+  orientation?: 'vertical' | 'horizontal';
+  colSpan?: 1 | 2;
 }
 
 // --- Helper Component: Column Selector (Smart Dropdown) ---
@@ -91,7 +95,7 @@ const ColumnSelector: React.FC<{
 };
 
 
-export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, previewData, onConfirm, initialConfig, onChange, compact = false }) => {
+export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, previewData, onConfirm, initialConfig, onChange, compact = false, fileId }) => {
   const [kpis, setKpis] = useState<string[]>(() => initialConfig?.kpis || []);
   const [charts, setCharts] = useState<ChartConfig[]>(() => {
     if (initialConfig?.charts) {
@@ -103,15 +107,109 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
           xAxis: c.xAxis,
           yAxis: c.yAxis || [],
           breakdown: c.breakdown,
-          order: c.order ?? index
+          order: c.order ?? index,
+          orientation: c.orientation || 'vertical',
+          colSpan: c.colSpan || 1
         }));
     }
-    return [{ id: 1, name: 'Gráfico Principal', xAxis: null, yAxis: [], breakdown: null, order: 0 }];
+    return [{ id: 1, name: 'Gráfico Principal', xAxis: null, yAxis: [], breakdown: null, order: 0, orientation: 'vertical' as const, colSpan: 1 as const }];
   });
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
   const [draggedChartIndex, setDraggedChartIndex] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(true);
+  const [loadingAiKpi, setLoadingAiKpi] = useState(false);
+  const [loadingAiChart, setLoadingAiChart] = useState(false);
   const prevChartsLength = useRef(charts.length);
+  
+  // Refs para tener siempre el valor actual (evita problemas de closure con estado async)
+  const chartsRef = useRef(charts);
+  const kpisRef = useRef(kpis);
+  
+  // Mantener refs actualizadas
+  useEffect(() => {
+    chartsRef.current = charts;
+  }, [charts]);
+  
+  useEffect(() => {
+    kpisRef.current = kpis;
+  }, [kpis]);
+
+  // Function to get current config for AI recommendations - usa refs para valor actual
+  const getCurrentConfig = () => ({
+    kpis: kpisRef.current,
+    charts: chartsRef.current
+      .filter(c => c.xAxis && c.yAxis.length > 0) // Solo gráficos configurados
+      .map((c, index) => ({
+        id: c.id,
+        title: c.name,
+        xAxis: c.xAxis,
+        yAxis: c.yAxis,
+        breakdown: c.breakdown,
+        order: index
+      }))
+  });
+
+  // AI-powered KPI recommendation
+  const handleAiAddKpi = async () => {
+    if (!fileId || loadingAiKpi) return;
+    setLoadingAiKpi(true);
+    try {
+      const response = await getNextRecommendation(fileId, getCurrentConfig(), 'kpi');
+      if (response.success && response.recommendation) {
+        const rec = response.recommendation as KPIRecommendation;
+        if (!kpisRef.current.includes(rec.column)) {
+          const updatedKpis = [...kpisRef.current, rec.column];
+          kpisRef.current = updatedKpis;
+          setKpis(updatedKpis);
+        }
+      } else {
+        alert(response.message || 'No hay más recomendaciones de KPIs disponibles');
+      }
+    } catch (error) {
+      console.error('Error getting AI KPI recommendation:', error);
+    } finally {
+      setLoadingAiKpi(false);
+    }
+  };
+
+  // AI-powered Chart recommendation
+  const handleAiAddChart = async () => {
+    if (!fileId || loadingAiChart) return;
+    setLoadingAiChart(true);
+    try {
+      const currentConfig = getCurrentConfig();
+      console.log('Enviando config al backend:', JSON.stringify(currentConfig, null, 2));
+      
+      const response = await getNextRecommendation(fileId, currentConfig, 'chart');
+      console.log('Respuesta del backend:', response);
+      
+      if (response.success && response.recommendation) {
+        const rec = response.recommendation as ChartRecommendation;
+        const newId = Date.now();
+        const newChart: ChartConfig = {
+          id: newId,
+          name: rec.title,
+          xAxis: rec.xAxis,
+          yAxis: rec.yAxis,
+          breakdown: rec.breakdown,
+          order: charts.length,
+          orientation: 'vertical',
+          colSpan: rec.breakdown ? 2 : 1 // Gráficos con breakdown ocupan 2 columnas por defecto
+        };
+        
+        // Actualizar estado Y ref inmediatamente
+        const updatedCharts = [...chartsRef.current, newChart];
+        chartsRef.current = updatedCharts;
+        setCharts(updatedCharts);
+      } else {
+        alert(response.message || 'No hay más recomendaciones de gráficos disponibles');
+      }
+    } catch (error) {
+      console.error('Error getting AI chart recommendation:', error);
+    } finally {
+      setLoadingAiChart(false);
+    }
+  };
 
   // Scroll to new chart when added
   useEffect(() => {
@@ -143,7 +241,9 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
           xAxis: c.xAxis,
           yAxis: c.yAxis || [],
           breakdown: c.breakdown,
-          order: c.order ?? index
+          order: c.order ?? index,
+          orientation: c.orientation || 'vertical',
+          colSpan: c.colSpan || 1
         }));
         
         // Compare IDs to see if order or content changed significantly enough to replace state
@@ -168,7 +268,9 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
           xAxis: c.xAxis,
           yAxis: c.yAxis,
           breakdown: c.breakdown,
-          order: index
+          order: index,
+          orientation: c.orientation || 'vertical',
+          colSpan: c.colSpan || 1
         }))
       };
       onChange(config);
@@ -264,7 +366,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
 
   const addChart = () => {
     const newId = Date.now();
-    setCharts([...charts, { id: newId, name: `Gráfico ${charts.length + 1}`, xAxis: null, yAxis: [], breakdown: null, order: charts.length }]);
+    setCharts([...charts, { id: newId, name: `Gráfico ${charts.length + 1}`, xAxis: null, yAxis: [], breakdown: null, order: charts.length, orientation: 'vertical', colSpan: 1 }]);
   };
 
   const removeChart = (id: number) => {
@@ -284,7 +386,9 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
         xAxis: c.xAxis,
         yAxis: c.yAxis,
         breakdown: c.breakdown,
-        order: index
+        order: index,
+        orientation: c.orientation || 'vertical',
+        colSpan: c.colSpan || 1
       }))
     };
     onConfirm(config);
@@ -333,6 +437,17 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
                   </button>
                 }
               />
+              {fileId && (
+                <button 
+                  onClick={handleAiAddKpi}
+                  disabled={loadingAiKpi}
+                  className="px-2.5 py-1 rounded-md bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-xs font-medium flex items-center gap-1 hover:from-purple-600 hover:to-indigo-600 transition-all disabled:opacity-50 shadow-sm"
+                  title="Añadir KPI recomendado por IA"
+                >
+                  {loadingAiKpi ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                  IA
+                </button>
+              )}
             </div>
           </div>
 
@@ -343,9 +458,21 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
                 <div className="w-1.5 h-4 bg-blue-500 rounded-full"></div>
                 Gráficos
               </h3>
-              <button onClick={addChart} className="text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors" title="Añadir Gráfico">
-                <PlusCircle className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {fileId && (
+                  <button 
+                    onClick={handleAiAddChart}
+                    disabled={loadingAiChart}
+                    className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:from-purple-600 hover:to-indigo-600 p-1 rounded transition-all disabled:opacity-50 shadow-sm" 
+                    title="Añadir Gráfico recomendado por IA"
+                  >
+                    {loadingAiChart ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  </button>
+                )}
+                <button onClick={addChart} className="text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors" title="Añadir Gráfico vacío">
+                  <PlusCircle className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {charts.map((chart, index) => (
@@ -512,6 +639,54 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
                       />
                     </div>
                   </div>
+
+                  {/* Display Options Row */}
+                  <div className="grid grid-cols-[80px_1fr] items-center gap-2 pt-2 border-t border-gray-100 mt-1">
+                    <label className="text-xs font-medium text-gray-500">Opciones</label>
+                    <div className="flex items-center gap-3">
+                      {/* Orientation Toggle */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-400">Barras:</span>
+                        <div className="flex bg-gray-100 rounded-md p-0.5">
+                          <button
+                            onClick={() => setCharts(charts.map(c => c.id === chart.id ? { ...c, orientation: 'vertical' } : c))}
+                            className={`p-1 rounded transition-all ${chart.orientation === 'vertical' || !chart.orientation ? 'bg-white shadow-sm text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            title="Barras verticales"
+                          >
+                            <AlignVerticalSpaceAround className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setCharts(charts.map(c => c.id === chart.id ? { ...c, orientation: 'horizontal' } : c))}
+                            className={`p-1 rounded transition-all ${chart.orientation === 'horizontal' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            title="Barras horizontales"
+                          >
+                            <AlignHorizontalSpaceAround className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Column Span Toggle */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-400">Ancho:</span>
+                        <div className="flex bg-gray-100 rounded-md p-0.5">
+                          <button
+                            onClick={() => setCharts(charts.map(c => c.id === chart.id ? { ...c, colSpan: 1 } : c))}
+                            className={`p-1 rounded transition-all ${chart.colSpan === 1 || !chart.colSpan ? 'bg-white shadow-sm text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            title="1 columna"
+                          >
+                            <Square className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setCharts(charts.map(c => c.id === chart.id ? { ...c, colSpan: 2 } : c))}
+                            className={`p-1 rounded transition-all ${chart.colSpan === 2 ? 'bg-white shadow-sm text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            title="2 columnas (ancho completo)"
+                          >
+                            <RectangleHorizontal className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -586,6 +761,17 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
                 </div>
               ))}
               {kpis.length === 0 && <span className="text-gray-400 italic text-sm">Suelta columnas aquí...</span>}
+              {fileId && (
+                <button 
+                  onClick={handleAiAddKpi}
+                  disabled={loadingAiKpi}
+                  className="px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-sm font-medium flex items-center gap-1.5 hover:from-purple-600 hover:to-indigo-600 transition-all disabled:opacity-50 shadow-sm"
+                  title="Añadir KPI recomendado por IA"
+                >
+                  {loadingAiKpi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  Sugerir con IA
+                </button>
+              )}
             </div>
           </div>
 
@@ -596,12 +782,25 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
                 <div className="w-2 h-6 bg-blue-500 rounded-full"></div>
                 Gráficos
               </h3>
-              <button 
-                onClick={addChart}
-                className="text-sm flex items-center gap-1 text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors font-medium"
-              >
-                <Plus className="w-4 h-4" /> Añadir Gráfico
-              </button>
+              <div className="flex items-center gap-2">
+                {fileId && (
+                  <button 
+                    onClick={handleAiAddChart}
+                    disabled={loadingAiChart}
+                    className="text-sm flex items-center gap-1.5 bg-gradient-to-r from-purple-500 to-indigo-500 text-white px-3 py-1.5 rounded-lg hover:from-purple-600 hover:to-indigo-600 transition-all disabled:opacity-50 shadow-sm font-medium"
+                    title="Añadir Gráfico recomendado por IA"
+                  >
+                    {loadingAiChart ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    Sugerir con IA
+                  </button>
+                )}
+                <button 
+                  onClick={addChart}
+                  className="text-sm flex items-center gap-1 text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                >
+                  <Plus className="w-4 h-4" /> Añadir Vacío
+                </button>
+              </div>
             </div>
 
             {charts.map((chart) => (

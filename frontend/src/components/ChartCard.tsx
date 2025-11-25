@@ -3,7 +3,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell
 } from 'recharts';
-import { Settings, BarChart2, Activity, PieChart as PieIcon, Layers } from 'lucide-react';
+import { Settings, BarChart2, Activity, PieChart as PieIcon, Layers, AlignVerticalSpaceAround, AlignHorizontalSpaceAround } from 'lucide-react';
 
 interface ChartData {
   id?: number;
@@ -13,6 +13,8 @@ interface ChartData {
   data: any[];
   lines?: string[];
   bars?: string[];
+  orientation?: 'vertical' | 'horizontal';
+  colSpan?: 1 | 2;
 }
 
 interface ChartCardProps {
@@ -51,6 +53,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId, index }) =>
   }
 
   const [type, setType] = useState<'line' | 'bar' | 'area' | 'pie'>(() => getInitialState('type', chart.type as any || 'bar'));
+  const [orientation, setOrientation] = useState<'vertical' | 'horizontal'>(() => getInitialState('orientation', chart.orientation || 'vertical'));
   
   // Auto-detect if we should use mixed colors (if there are many series)
   const dataKeys = chart.lines || chart.bars || [];
@@ -62,9 +65,9 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId, index }) =>
   useEffect(() => {
     if (fileId && chartId !== undefined) {
         const storageKey = `chart_settings_${fileId}_${chartId}`;
-        localStorage.setItem(storageKey, JSON.stringify({ type, colorTheme }));
+        localStorage.setItem(storageKey, JSON.stringify({ type, colorTheme, orientation }));
     }
-  }, [type, colorTheme, fileId, chartId]);
+  }, [type, colorTheme, orientation, fileId, chartId]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -112,6 +115,8 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId, index }) =>
       data: chart.data,
       margin: { top: 10, right: 30, left: 0, bottom: 0 }
     };
+    
+    const isHorizontal = orientation === 'horizontal';
 
     switch (type) {
       case 'line':
@@ -141,10 +146,19 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId, index }) =>
         );
       case 'bar':
         return (
-          <BarChart {...commonProps}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-            <XAxis dataKey={chart.xAxis} fontSize={12} tickMargin={10} stroke="#9ca3af" tickFormatter={formatXAxis} />
-            <YAxis fontSize={12} tickFormatter={(val) => `${val / 1000}k`} stroke="#9ca3af" />
+          <BarChart {...commonProps} layout={isHorizontal ? 'vertical' : 'horizontal'}>
+            <CartesianGrid strokeDasharray="3 3" vertical={!isHorizontal} horizontal={isHorizontal} stroke="#e5e7eb" />
+            {isHorizontal ? (
+              <>
+                <XAxis type="number" fontSize={12} tickFormatter={(val) => `${val / 1000}k`} stroke="#9ca3af" />
+                <YAxis dataKey={chart.xAxis} type="category" fontSize={11} tickMargin={5} stroke="#9ca3af" width={100} />
+              </>
+            ) : (
+              <>
+                <XAxis dataKey={chart.xAxis} fontSize={12} tickMargin={10} stroke="#9ca3af" tickFormatter={formatXAxis} />
+                <YAxis fontSize={12} tickFormatter={(val) => `${val / 1000}k`} stroke="#9ca3af" />
+              </>
+            )}
             <Tooltip 
               formatter={(value: number) => formatNumber(value)}
               labelFormatter={formatXAxis}
@@ -278,6 +292,31 @@ export const ChartCard: React.FC<ChartCardProps> = ({ chart, fileId, index }) =>
               </button>
             </div>
           </div>
+
+          {/* Orientation selector - only for bar charts */}
+          {type === 'bar' && (
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-500 mb-2">Orientación</label>
+              <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
+                <button 
+                  onClick={() => setOrientation('vertical')}
+                  className={`flex-1 p-1.5 rounded-md flex items-center justify-center gap-1 ${orientation === 'vertical' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                  title="Barras verticales"
+                >
+                  <AlignVerticalSpaceAround className="w-4 h-4" />
+                  <span className="text-xs">Vertical</span>
+                </button>
+                <button 
+                  onClick={() => setOrientation('horizontal')}
+                  className={`flex-1 p-1.5 rounded-md flex items-center justify-center gap-1 ${orientation === 'horizontal' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                  title="Barras horizontales"
+                >
+                  <AlignHorizontalSpaceAround className="w-4 h-4" />
+                  <span className="text-xs">Horizontal</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-2">Color del Tema</label>

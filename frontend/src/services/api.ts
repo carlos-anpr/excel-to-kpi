@@ -78,3 +78,64 @@ export const getInsights = async (fileId: string): Promise<InsightsResponse> => 
   const response = await axios.get<InsightsResponse>(`${API_URL}/files/${fileId}/insights`);
   return response.data;
 };
+
+// Recommendations types
+export interface KPIRecommendation {
+  column: string;
+  priority: 'high' | 'medium' | 'low';
+  reason: string;
+  preview_value: number;
+}
+
+export interface ChartRecommendation {
+  title: string;
+  xAxis: string;
+  yAxis: string[];
+  breakdown: string | null;
+  priority: 'high' | 'medium' | 'low';
+  reason: string;
+  chart_type_suggestion: string;
+}
+
+export interface RecommendationsSummary {
+  total_columns: number;
+  total_rows: number;
+  date_columns_found: number;
+  numeric_columns_found: number;
+  category_columns_found: number;
+  recommended_kpis: number;
+  recommended_charts: number;
+  message: string;
+}
+
+export interface RecommendationsResponse {
+  file_id: string;
+  filename: string;
+  summary: RecommendationsSummary;
+  kpi_recommendations: KPIRecommendation[];
+  chart_recommendations: ChartRecommendation[];
+  analysis: any;
+}
+
+export const getRecommendations = async (fileId: string): Promise<RecommendationsResponse> => {
+  const response = await axios.get<RecommendationsResponse>(`${API_URL}/files/${fileId}/recommendations`);
+  return response.data;
+};
+
+export interface NextRecommendationResponse {
+  success: boolean;
+  recommendation?: KPIRecommendation | ChartRecommendation;
+  message?: string;
+}
+
+export const getNextRecommendation = async (
+  fileId: string, 
+  existingConfig: any, 
+  type: 'kpi' | 'chart'
+): Promise<NextRecommendationResponse> => {
+  const response = await axios.post<NextRecommendationResponse>(
+    `${API_URL}/files/${fileId}/recommendations/next`,
+    { existing_config: existingConfig, type }
+  );
+  return response.data;
+};

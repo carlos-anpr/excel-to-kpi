@@ -307,6 +307,7 @@ function App() {
                         initialConfig={initialMapping}
                         onChange={setCurrentConfig}
                         compact={true}
+                        fileId={currentFileId || undefined}
                     />
                   </div>
                 </div>
@@ -349,6 +350,7 @@ function App() {
                         initialConfig={initialMapping}
                         onChange={handleMappingChange}
                         compact={true}
+                        fileId={currentFileId || undefined}
                       />
                     )}
                   </div>
