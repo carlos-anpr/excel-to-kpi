@@ -1,6 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, X, BarChart2, Trash2, GripVertical, Eye, EyeOff, Search, ChevronDown, PlusCircle, Sparkles, Loader2, AlignVerticalSpaceAround, AlignHorizontalSpaceAround, RectangleHorizontal, Square } from 'lucide-react';
+import { Plus, X, BarChart2, Trash2, GripVertical, Eye, EyeOff, Search, ChevronDown, PlusCircle, Sparkles, Loader2, AlignVerticalSpaceAround, AlignHorizontalSpaceAround, RectangleHorizontal, Square, Calculator } from 'lucide-react';
 import { getNextRecommendation, ChartRecommendation, KPIRecommendation } from '../services/api';
+
+// Tipos de agregación disponibles
+type AggregationType = 'auto' | 'sum' | 'avg' | 'count' | 'countd' | 'min' | 'max';
+
+const AGGREGATION_OPTIONS: { value: AggregationType; label: string; icon: string }[] = [
+  { value: 'auto', label: 'Auto', icon: '🔮' },
+  { value: 'sum', label: 'Suma', icon: 'Σ' },
+  { value: 'avg', label: 'Promedio', icon: 'x̄' },
+  { value: 'count', label: 'Conteo', icon: '#' },
+  { value: 'countd', label: 'Únicos', icon: '◇' },
+  { value: 'min', label: 'Mínimo', icon: '↓' },
+  { value: 'max', label: 'Máximo', icon: '↑' },
+];
 
 interface DashboardBuilderProps {
   columns: string[];
@@ -12,6 +25,12 @@ interface DashboardBuilderProps {
   fileId?: string; // Needed for AI recommendations
 }
 
+// Configuración de KPI con agregación
+interface KPIConfig {
+  column: string;
+  aggregation: AggregationType;
+}
+
 interface ChartConfig {
   id: number;
   name: string;
@@ -21,7 +40,62 @@ interface ChartConfig {
   order: number;
   orientation?: 'vertical' | 'horizontal';
   colSpan?: 1 | 2;
+  aggregations?: Record<string, AggregationType>; // Agregación por columna Y
 }
+
+// --- Helper Component: Aggregation Selector ---
+const AggregationSelector: React.FC<{
+  value: AggregationType;
+  onChange: (agg: AggregationType) => void;
+  compact?: boolean;
+}> = ({ value, onChange, compact = false }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const currentOption = AGGREGATION_OPTIONS.find(o => o.value === value) || AGGREGATION_OPTIONS[0];
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors
+          ${compact ? 'bg-gray-100 hover:bg-gray-200 border-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300'}
+          ${isOpen ? 'ring-2 ring-blue-300' : ''}`}
+        title={`Agregación: ${currentOption.label}`}
+      >
+        <span className="font-mono">{currentOption.icon}</span>
+        {!compact && <span>{currentOption.label}</span>}
+        <ChevronDown className="w-3 h-3" />
+      </button>
+      
+      {isOpen && (
+        <div className="absolute z-50 mt-1 w-32 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          {AGGREGATION_OPTIONS.map(option => (
+            <div
+              key={option.value}
+              onClick={() => { onChange(option.value); setIsOpen(false); }}
+              className={`flex items-center gap-2 px-3 py-2 text-sm cursor-pointer transition-colors
+                ${option.value === value ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'}`}
+            >
+              <span className="font-mono w-4">{option.icon}</span>
+              <span>{option.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // --- Helper Component: Column Selector (Smart Dropdown) ---
 const ColumnSelector: React.FC<{
@@ -45,7 +119,10 @@ const ColumnSelector: React.FC<{
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [wrapperRef]);
 
-  const filteredColumns = columns.filter(c => c.toLowerCase().includes(search.toLowerCase()));
+  // Filter columns safely - ensure each column is a valid string
+  const filteredColumns = columns
+    .filter(c => typeof c === 'string' && c.trim() !== '')
+    .filter(c => c.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className={`relative ${className}`} ref={wrapperRef}>
@@ -95,8 +172,20 @@ const ColumnSelector: React.FC<{
 };
 
 
-export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, previewData, onConfirm, initialConfig, onChange, compact = false, fileId }) => {
-  const [kpis, setKpis] = useState<string[]>(() => initialConfig?.kpis || []);
+export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns: rawColumns, previewData, onConfirm, initialConfig, onChange, compact = false, fileId }) => {
+  // Sanitize columns - ensure all are valid strings
+  const columns = (rawColumns || []).filter((c): c is string => typeof c === 'string' && c.trim() !== '');
+  
+  // KPIs ahora soportan configuración con agregación
+  const [kpis, setKpis] = useState<KPIConfig[]>(() => {
+    if (initialConfig?.kpis) {
+      return initialConfig.kpis.map((k: string | KPIConfig) => 
+        typeof k === 'string' ? { column: k, aggregation: 'auto' as AggregationType } : k
+      );
+    }
+    return [];
+  });
+  
   const [charts, setCharts] = useState<ChartConfig[]>(() => {
     if (initialConfig?.charts) {
       return initialConfig.charts
@@ -109,10 +198,11 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
           breakdown: c.breakdown,
           order: c.order ?? index,
           orientation: c.orientation || 'vertical',
-          colSpan: c.colSpan || 1
+          colSpan: c.colSpan || 1,
+          aggregations: c.aggregations || {}
         }));
     }
-    return [{ id: 1, name: 'Gráfico Principal', xAxis: null, yAxis: [], breakdown: null, order: 0, orientation: 'vertical' as const, colSpan: 1 as const }];
+    return [{ id: 1, name: 'Gráfico Principal', xAxis: null, yAxis: [], breakdown: null, order: 0, orientation: 'vertical' as const, colSpan: 1 as const, aggregations: {} }];
   });
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
   const [draggedChartIndex, setDraggedChartIndex] = useState<number | null>(null);
@@ -136,7 +226,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
 
   // Function to get current config for AI recommendations - usa refs para valor actual
   const getCurrentConfig = () => ({
-    kpis: kpisRef.current,
+    kpis: kpisRef.current.map(k => k.column), // Solo columnas para la IA
     charts: chartsRef.current
       .filter(c => c.xAxis && c.yAxis.length > 0) // Solo gráficos configurados
       .map((c, index) => ({
@@ -145,7 +235,8 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
         xAxis: c.xAxis,
         yAxis: c.yAxis,
         breakdown: c.breakdown,
-        order: index
+        order: index,
+        aggregations: c.aggregations
       }))
   });
 
@@ -243,13 +334,14 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
           breakdown: c.breakdown,
           order: c.order ?? index,
           orientation: c.orientation || 'vertical',
-          colSpan: c.colSpan || 1
+          colSpan: c.colSpan || 1,
+          aggregations: c.aggregations || {}
         }));
         
-        // Compare IDs to see if order or content changed significantly enough to replace state
-        // We use JSON stringify of a simplified object to check for deep equality of structure/order
-        const currentStateSig = JSON.stringify(charts.map(c => ({ id: c.id, order: c.order })));
-        const newStateSig = JSON.stringify(newChartsState.map((c: any) => ({ id: c.id, order: c.order })));
+        // Compare to see if order or content changed significantly enough to replace state
+        // Include aggregations in comparison to avoid losing changes
+        const currentStateSig = JSON.stringify(charts.map(c => ({ id: c.id, order: c.order, aggregations: c.aggregations })));
+        const newStateSig = JSON.stringify(newChartsState.map((c: any) => ({ id: c.id, order: c.order, aggregations: c.aggregations })));
         
         if (currentStateSig !== newStateSig) {
             setCharts(newChartsState);
@@ -261,7 +353,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
   React.useEffect(() => {
     if (onChange) {
       const config = {
-        kpis,
+        kpis: kpis, // Ya tiene formato {column, aggregation}
         charts: charts.map((c, index) => ({
           id: c.id,
           title: c.name,
@@ -270,9 +362,11 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
           breakdown: c.breakdown,
           order: index,
           orientation: c.orientation || 'vertical',
-          colSpan: c.colSpan || 1
+          colSpan: c.colSpan || 1,
+          aggregations: c.aggregations || {}
         }))
       };
+      console.log('[DashboardBuilder] onChange triggered, config:', JSON.stringify(config, null, 2));
       onChange(config);
     }
   }, [kpis, charts, onChange]);
@@ -332,7 +426,9 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
   // --- Direct State Manipulation (Shared) ---
   const handleDirectAdd = (type: 'kpi' | 'xAxis' | 'yAxis' | 'breakdown', col: string, chartId?: number) => {
     if (type === 'kpi') {
-      if (!kpis.includes(col)) setKpis([...kpis, col]);
+      if (!kpis.find(k => k.column === col)) {
+        setKpis([...kpis, { column: col, aggregation: 'auto' }]);
+      }
     } else if (chartId) {
       setCharts(charts.map(chart => {
         if (chart.id !== chartId) return chart;
@@ -343,7 +439,9 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
           return { ...chart, breakdown: col };
         } else {
           if (!chart.yAxis.includes(col)) {
-            return { ...chart, yAxis: [...chart.yAxis, col] };
+            // Añadir columna Y con agregación auto
+            const newAggregations = { ...chart.aggregations, [col]: 'auto' as AggregationType };
+            return { ...chart, yAxis: [...chart.yAxis, col], aggregations: newAggregations };
           }
         }
         return chart;
@@ -352,7 +450,20 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
   };
 
   const removeKpi = (col: string) => {
-    setKpis(kpis.filter(k => k !== col));
+    setKpis(kpis.filter(k => k.column !== col));
+  };
+  
+  const updateKpiAggregation = (col: string, aggregation: AggregationType) => {
+    console.log('[DashboardBuilder] updateKpiAggregation:', col, aggregation);
+    setKpis(kpis.map(k => k.column === col ? { ...k, aggregation } : k));
+  };
+  
+  const updateChartAggregation = (chartId: number, col: string, aggregation: AggregationType) => {
+    console.log('[DashboardBuilder] updateChartAggregation:', chartId, col, aggregation);
+    setCharts(charts.map(chart => {
+      if (chart.id !== chartId) return chart;
+      return { ...chart, aggregations: { ...chart.aggregations, [col]: aggregation } };
+    }));
   };
 
   const removeChartItem = (chartId: number, type: 'xAxis' | 'yAxis' | 'breakdown', col: string) => {
@@ -366,7 +477,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
 
   const addChart = () => {
     const newId = Date.now();
-    setCharts([...charts, { id: newId, name: `Gráfico ${charts.length + 1}`, xAxis: null, yAxis: [], breakdown: null, order: charts.length, orientation: 'vertical', colSpan: 1 }]);
+    setCharts([...charts, { id: newId, name: `Gráfico ${charts.length + 1}`, xAxis: null, yAxis: [], breakdown: null, order: charts.length, orientation: 'vertical', colSpan: 1, aggregations: {} }]);
   };
 
   const removeChart = (id: number) => {
@@ -379,7 +490,7 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
       return;
     }
     const config = {
-      kpis,
+      kpis: kpis, // Ya en formato {column, aggregation}
       charts: charts.map((c, index) => ({
         id: c.id,
         title: c.name,
@@ -388,7 +499,8 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
         breakdown: c.breakdown,
         order: index,
         orientation: c.orientation || 'vertical',
-        colSpan: c.colSpan || 1
+        colSpan: c.colSpan || 1,
+        aggregations: c.aggregations || {}
       }))
     };
     onConfirm(config);
@@ -423,9 +535,14 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
             </h3>
             <div className="flex flex-wrap gap-2">
               {kpis.map(kpi => (
-                <div key={kpi} className="bg-green-50 px-2.5 py-1 rounded-md border border-green-200 text-green-700 text-xs font-medium flex items-center gap-1.5 group">
-                  {kpi}
-                  <button onClick={() => removeKpi(kpi)} className="text-green-400 hover:text-red-500"><X className="w-3 h-3" /></button>
+                <div key={kpi.column} className="bg-green-50 px-2.5 py-1 rounded-md border border-green-200 text-green-700 text-xs font-medium flex items-center gap-1.5 group">
+                  <AggregationSelector 
+                    value={kpi.aggregation} 
+                    onChange={(agg) => updateKpiAggregation(kpi.column, agg)}
+                    compact
+                  />
+                  {kpi.column}
+                  <button onClick={() => removeKpi(kpi.column)} className="text-green-400 hover:text-red-500"><X className="w-3 h-3" /></button>
                 </div>
               ))}
               <ColumnSelector 
@@ -578,6 +695,11 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
                     >
                       {chart.yAxis.map(col => (
                         <div key={col} className="bg-purple-50 px-2 py-1 rounded border border-purple-200 text-purple-700 text-xs flex items-center gap-1">
+                          <AggregationSelector 
+                            value={chart.aggregations?.[col] || 'auto'} 
+                            onChange={(agg) => updateChartAggregation(chart.id, col, agg)}
+                            compact
+                          />
                           <span className="truncate max-w-[80px]">{col}</span>
                           <button onClick={() => removeChartItem(chart.id, 'yAxis', col)} className="hover:text-red-500"><X className="w-3 h-3" /></button>
                         </div>
@@ -755,9 +877,14 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
             
             <div className="flex flex-wrap gap-2">
               {kpis.map(kpi => (
-                <div key={kpi} className="bg-white px-3 py-1.5 rounded-full border border-green-200 text-green-700 text-sm font-medium flex items-center gap-2 shadow-sm">
-                  {kpi}
-                  <button onClick={() => removeKpi(kpi)} className="hover:text-red-500"><X className="w-3 h-3" /></button>
+                <div key={kpi.column} className="bg-white px-3 py-1.5 rounded-full border border-green-200 text-green-700 text-sm font-medium flex items-center gap-2 shadow-sm">
+                  <AggregationSelector 
+                    value={kpi.aggregation} 
+                    onChange={(agg) => updateKpiAggregation(kpi.column, agg)}
+                    compact
+                  />
+                  {kpi.column}
+                  <button onClick={() => removeKpi(kpi.column)} className="hover:text-red-500"><X className="w-3 h-3" /></button>
                 </div>
               ))}
               {kpis.length === 0 && <span className="text-gray-400 italic text-sm">Suelta columnas aquí...</span>}
@@ -867,7 +994,14 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns, pre
                     <div className="space-y-2">
                       {chart.yAxis.map(col => (
                         <div key={col} className="bg-white px-3 py-2 rounded-lg border border-purple-200 text-purple-700 text-sm font-medium flex justify-between items-center shadow-sm">
-                          {col}
+                          <div className="flex items-center gap-2">
+                            <AggregationSelector 
+                              value={chart.aggregations?.[col] || 'auto'} 
+                              onChange={(agg) => updateChartAggregation(chart.id, col, agg)}
+                              compact
+                            />
+                            {col}
+                          </div>
                           <button onClick={() => removeChartItem(chart.id, 'yAxis', col)} className="hover:text-red-500"><X className="w-3 h-3" /></button>
                         </div>
                       ))}

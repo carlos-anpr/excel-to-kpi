@@ -4,6 +4,7 @@ Genera sugerencias inteligentes de KPIs y gráficos basados en el análisis de d
 """
 import pandas as pd
 import numpy as np
+import math
 from typing import List, Dict, Any, Optional
 
 
@@ -12,9 +13,17 @@ def _to_native(val):
     if isinstance(val, (np.integer, np.int64, np.int32)):
         return int(val)
     elif isinstance(val, (np.floating, np.float64, np.float32)):
-        return float(val)
+        float_val = float(val)
+        # Handle NaN and Infinity
+        if math.isnan(float_val) or math.isinf(float_val):
+            return None
+        return float_val
+    elif isinstance(val, float):
+        if math.isnan(val) or math.isinf(val):
+            return None
+        return val
     elif isinstance(val, np.ndarray):
-        return val.tolist()
+        return [_to_native(v) for v in val.tolist()]
     elif pd.isna(val):
         return None
     return val

@@ -1,9 +1,107 @@
 import pandas as pd
+import numpy as np
 import os
 import uuid
 import json
+import math
 
 UPLOAD_DIR = "uploads"
+
+# Keywords para detectar métricas que deberían usar PROMEDIO en lugar de SUMA
+AVERAGE_KEYWORDS = ['age', 'edad', 'height', 'altura', 'weight', 'peso', 'score', 'puntuacion', 
+                    'rating', 'calificacion', 'rate', 'tasa', 'percentage', 'porcentaje', 'percent',
+                    'average', 'promedio', 'mean', 'media', 'ratio', 'index', 'indice',
+                    'temperature', 'temperatura', 'speed', 'velocidad', 'duration', 'duracion']
+
+# Keywords para detectar columnas que son identificadores/categorías (usar COUNT)
+COUNT_KEYWORDS = ['id', 'name', 'nombre', 'country', 'pais', 'city', 'ciudad', 'region', 
+                  'category', 'categoria', 'type', 'tipo', 'status', 'estado', 'code', 'codigo',
+                  'nationality', 'nacionalidad', 'sport', 'deporte', 'team', 'equipo',
+                  'product', 'producto', 'customer', 'cliente', 'segment', 'segmento']
+
+
+def detect_aggregation(column_name: str, dtype, df: pd.DataFrame = None) -> str:
+    """
+    Detecta automáticamente la función de agregación apropiada.
+    Returns: 'sum', 'avg', 'count', 'countd' (count distinct)
+    """
+    col_lower = column_name.lower()
+    
+    # Si es string/object, usar conteo
+    if dtype == 'object' or dtype == 'string':
+        return 'count'
+    
+    # Si el nombre sugiere promedio
+    if any(keyword in col_lower for keyword in AVERAGE_KEYWORDS):
+        return 'avg'
+    
+    # Si el nombre sugiere categoría/ID, usar conteo
+    if any(keyword in col_lower for keyword in COUNT_KEYWORDS):
+        return 'count'
+    
+    # Por defecto para numéricos: suma
+    return 'sum'
+
+
+def should_use_average(column_name: str) -> bool:
+    """Determina si una columna debería usar promedio en lugar de suma."""
+    col_lower = column_name.lower()
+    return any(keyword in col_lower for keyword in AVERAGE_KEYWORDS)
+
+
+def apply_aggregation(series: pd.Series, agg_type: str) -> float:
+    """Aplica la función de agregación especificada a una serie."""
+    if agg_type == 'sum':
+        return series.sum()
+    elif agg_type == 'avg':
+        return round(series.mean(), 2)
+    elif agg_type == 'count':
+        return len(series)
+    elif agg_type == 'countd':
+        return series.nunique()
+    elif agg_type == 'min':
+        return series.min()
+    elif agg_type == 'max':
+        return series.max()
+    else:
+        return series.sum()
+
+
+def get_agg_label(agg_type: str, column_name: str) -> str:
+    """Genera la etiqueta apropiada según el tipo de agregación."""
+    labels = {
+        'sum': f'Total {column_name}',
+        'avg': f'Promedio {column_name}',
+        'count': f'Cantidad {column_name}',
+        'countd': f'Únicos {column_name}',
+        'min': f'Mínimo {column_name}',
+        'max': f'Máximo {column_name}'
+    }
+    return labels.get(agg_type, f'{column_name}')
+
+
+def sanitize_for_json(obj):
+    """
+    Recursively sanitize data for JSON serialization.
+    Handles NaN, Infinity, -Infinity and converts them to None or valid values.
+    """
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_for_json(item) for item in obj]
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    elif isinstance(obj, (np.floating, np.integer)):
+        val = float(obj)
+        if math.isnan(val) or math.isinf(val):
+            return None
+        return val
+    elif pd.isna(obj):
+        return None
+    return obj
+
 
 class DataService:
     @staticmethod
@@ -62,6 +160,13 @@ class DataService:
             return pd.read_csv(file_path, sep=None, engine='python', encoding='latin-1', on_bad_lines='skip')
 
     @staticmethod
+    def _sanitize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+        """Sanitize DataFrame by replacing non-JSON-serializable values."""
+        # Replace inf/-inf with NaN first, then NaN with None
+        df = df.replace([np.inf, -np.inf], np.nan)
+        return df
+
+    @staticmethod
     def get_preview(file_id: str) -> dict:
         """Lee el archivo guardado y devuelve una previsualización (primeras 5 filas)."""
         # Buscar el archivo con ese ID (puede ser .csv o .xlsx)
@@ -80,11 +185,18 @@ class DataService:
         try:
             df = DataService._load_dataframe(found_file)
             
+            # Sanitize the dataframe
+            df = DataService._sanitize_dataframe(df)
+            
             # Reemplazar NaN con None (null en JSON) para evitar errores en el frontend
             df = df.where(pd.notnull(df), None)
 
             preview = df.head(20).to_dict(orient="records")
-            columns = list(df.columns)
+            # Sanitize preview data for JSON
+            preview = sanitize_for_json(preview)
+            
+            # Ensure columns are all strings
+            columns = [str(col) for col in df.columns if col is not None]
             
             return {
                 "file_id": file_id,
@@ -122,30 +234,68 @@ class DataService:
 
             if is_new_config:
                 # --- LÓGICA NUEVA (DashboardBuilder) ---
-                kpi_cols = mapping.get("kpis", [])
+                kpi_config = mapping.get("kpis", [])
                 charts_config = mapping.get("charts", [])
 
-                # 1. Generar KPIs
-                for col in kpi_cols:
-                    if col in df.columns:
-                        # Intentar limpiar y convertir a numérico si es necesario
+                # 1. Generar KPIs - Ahora soporta configuración con agregación
+                for kpi_item in kpi_config:
+                    # Soportar tanto string simple como objeto {column, aggregation}
+                    if isinstance(kpi_item, dict):
+                        col = kpi_item.get('column')
+                        agg_type = kpi_item.get('aggregation', 'auto')
+                    else:
+                        col = kpi_item
+                        agg_type = 'auto'
+                    
+                    if col and col in df.columns:
                         try:
-                            numeric_series = pd.to_numeric(df[col], errors='coerce')
+                            # Detectar tipo de dato
+                            dtype = str(df[col].dtype)
+                            is_numeric = pd.api.types.is_numeric_dtype(df[col])
                             
-                            # Si la conversión resulta en todo NaN (es texto), contamos únicos
-                            if numeric_series.isna().all():
-                                total = df[col].nunique()
-                                label = f"Unique {col}"
-                            else:
-                                total = numeric_series.sum()
-                                label = f"Total {col}"
+                            # Auto-detectar agregación si no se especificó
+                            if agg_type == 'auto':
+                                agg_type = detect_aggregation(col, dtype, df)
+                            
+                            # Calcular valor según tipo de agregación
+                            if agg_type == 'count':
+                                value = len(df[col].dropna())
+                                label = f"Cantidad {col}"
+                            elif agg_type == 'countd':
+                                value = df[col].nunique()
+                                label = f"Únicos {col}"
+                            elif agg_type == 'avg':
+                                numeric_series = pd.to_numeric(df[col], errors='coerce')
+                                value = numeric_series.mean()
+                                value = round(value, 1) if pd.notnull(value) else 0
+                                label = f"Promedio {col}"
+                            elif agg_type == 'min':
+                                numeric_series = pd.to_numeric(df[col], errors='coerce')
+                                value = numeric_series.min()
+                                label = f"Mínimo {col}"
+                            elif agg_type == 'max':
+                                numeric_series = pd.to_numeric(df[col], errors='coerce')
+                                value = numeric_series.max()
+                                label = f"Máximo {col}"
+                            else:  # sum
+                                numeric_series = pd.to_numeric(df[col], errors='coerce')
+                                if numeric_series.isna().all():
+                                    # Es texto, contar únicos
+                                    value = df[col].nunique()
+                                    label = f"Únicos {col}"
+                                    agg_type = 'countd'
+                                else:
+                                    value = numeric_series.sum()
+                                    label = f"Total {col}"
 
                             dashboard_data["kpis"].append({
                                 "label": label,
-                                "value": float(total) if pd.notnull(total) else 0,
-                                "type": "sum"
+                                "value": float(value) if pd.notnull(value) else 0,
+                                "type": agg_type,
+                                "column": col
                             })
-                        except:
+                        except Exception as e:
+                            print(f"Error procesando KPI {col}: {e}")
                             pass
 
                 # 2. Generar Gráficos Configurados
@@ -158,6 +308,8 @@ class DataService:
                     order = chart.get("order", 0)
                     orientation = chart.get("orientation", "vertical")
                     col_span = chart.get("colSpan", 1)
+                    # Nueva: agregación por métrica (puede ser string o dict por columna)
+                    aggregations = chart.get("aggregations", {})  # {column_name: 'sum'|'avg'|'count'|'auto'}
 
                     if x_col and y_cols and x_col in df.columns:
                         try:
@@ -171,10 +323,33 @@ class DataService:
                             
                             chart_df = df[needed_cols].copy()
 
-                            # Asegurar que las columnas Y sean numéricas en la copia
+                            # Determinar agregaciones para cada columna Y
+                            agg_funcs = {}
                             for y_col in y_cols:
                                 if y_col in chart_df.columns:
-                                    chart_df[y_col] = pd.to_numeric(chart_df[y_col], errors='coerce')
+                                    # Obtener agregación configurada o auto-detectar
+                                    agg_type = aggregations.get(y_col, 'auto')
+                                    if agg_type == 'auto':
+                                        dtype = str(chart_df[y_col].dtype)
+                                        agg_type = detect_aggregation(y_col, dtype, chart_df)
+                                    
+                                    # Convertir a función pandas
+                                    if agg_type == 'count':
+                                        agg_funcs[y_col] = 'count'
+                                    elif agg_type == 'countd':
+                                        agg_funcs[y_col] = 'nunique'
+                                    elif agg_type == 'avg':
+                                        agg_funcs[y_col] = 'mean'
+                                    elif agg_type == 'min':
+                                        agg_funcs[y_col] = 'min'
+                                    elif agg_type == 'max':
+                                        agg_funcs[y_col] = 'max'
+                                    else:  # sum
+                                        agg_funcs[y_col] = 'sum'
+                                    
+                                    # Convertir a numérico si no es count
+                                    if agg_type not in ['count', 'countd']:
+                                        chart_df[y_col] = pd.to_numeric(chart_df[y_col], errors='coerce')
 
                             # --- DETECCIÓN DE TIPOS DE EJE X ---
                             is_date = False
@@ -198,14 +373,18 @@ class DataService:
 
                             if breakdown_col and breakdown_col in chart_df.columns:
                                 # --- LÓGICA DE AGRUPACIÓN (BREAKDOWN) ---
-                                # Agrupar por [X, Breakdown] y sumar la primera métrica Y
                                 metric = y_cols[0]
+                                agg_func = agg_funcs.get(metric, 'sum')
                                 
                                 # Drop rows where x_col is NaT/NaN if it's a date
                                 if is_date:
                                     chart_df = chart_df.dropna(subset=[x_col])
 
-                                grouped_df = chart_df.groupby([x_col, breakdown_col])[metric].sum().reset_index()
+                                grouped_df = chart_df.groupby([x_col, breakdown_col])[metric].agg(agg_func).reset_index()
+                                
+                                # Redondear si es promedio
+                                if agg_func == 'mean':
+                                    grouped_df[metric] = grouped_df[metric].round(1)
                                 
                                 # Pivotar para que los valores de breakdown sean columnas
                                 pivot_df = grouped_df.pivot(index=x_col, columns=breakdown_col, values=metric).reset_index()
@@ -216,29 +395,42 @@ class DataService:
                                 
                                 if is_date:
                                     pivot_df = pivot_df.sort_values(x_col)
-                                    # Convert to string for JSON serialization
                                     pivot_df[x_col] = pivot_df[x_col].dt.strftime('%Y-%m-%d')
                                 elif is_numeric_x:
                                     pivot_df = pivot_df.sort_values(x_col).head(50)
                                 
+                                # Título con indicación de agregación
+                                agg_labels = {'mean': 'Promedio', 'count': 'Cantidad', 'nunique': 'Únicos', 'sum': 'Total', 'min': 'Mín', 'max': 'Máx'}
+                                agg_label = agg_labels.get(agg_func, '')
+                                chart_title = f"{title} (por {breakdown_col})"
+                                if agg_label and agg_func != 'sum':
+                                    chart_title = f"{title} - {agg_label} (por {breakdown_col})"
+                                
                                 dashboard_data["charts"].append({
                                     "id": chart_id,
-                                    "type": "bar", # Default a barras apiladas o agrupadas
-                                    "title": f"{title} (por {breakdown_col})",
+                                    "type": "bar",
+                                    "title": chart_title,
                                     "xAxis": x_col,
                                     "data": pivot_df.to_dict(orient="records"),
-                                    "bars": new_series, # Usamos 'bars' para que ChartCard las pinte
+                                    "bars": new_series,
                                     "order": order,
                                     "orientation": orientation,
-                                    "colSpan": col_span
+                                    "colSpan": col_span,
+                                    "aggregation": agg_func
                                 })
                                 
                             else:
                                 # --- LÓGICA SIMPLE (SIN AGRUPACIÓN) ---
                                 if is_date:
                                     chart_df = chart_df.dropna(subset=[x_col])
-                                    
-                                grouped_df = chart_df.groupby(x_col)[y_cols].sum().reset_index()
+                                
+                                # Usar las agregaciones ya calculadas
+                                grouped_df = chart_df.groupby(x_col).agg(agg_funcs).reset_index()
+                                
+                                # Redondear métricas que usan promedio
+                                for y_col in y_cols:
+                                    if agg_funcs.get(y_col) == 'mean':
+                                        grouped_df[y_col] = grouped_df[y_col].round(1)
                                 
                                 if is_date:
                                     grouped_df = grouped_df.sort_values(x_col)
@@ -249,24 +441,31 @@ class DataService:
                                     grouped_df = grouped_df.sort_values(y_cols[0], ascending=False).head(20)
 
                                 # Determinar tipo por defecto (Línea si es fecha, Barra si no)
-                                # Si el nombre de la columna sugiere fecha, forzar línea
                                 x_col_lower = x_col.lower()
                                 date_keywords = ['date', 'fecha', 'time', 'tiempo', 'year', 'año', 'month', 'mes', 'day', 'dia']
                                 is_date_by_name = any(k in x_col_lower for k in date_keywords)
                                 
                                 chart_type = "line" if (is_date or is_date_by_name) else "bar"
+                                
+                                # Ajustar título según agregación usada
+                                agg_labels = {'mean': 'Promedio', 'count': 'Cantidad', 'nunique': 'Únicos'}
+                                chart_title = title
+                                primary_agg = agg_funcs.get(y_cols[0], 'sum') if y_cols else 'sum'
+                                if primary_agg in agg_labels and primary_agg not in title.lower():
+                                    chart_title = f"{title} ({agg_labels[primary_agg]})"
 
                                 dashboard_data["charts"].append({
                                     "id": chart_id,
                                     "type": chart_type,
-                                    "title": title,
+                                    "title": chart_title,
                                     "xAxis": x_col,
                                     "data": grouped_df.to_dict(orient="records"),
                                     "lines": y_cols if chart_type == "line" else None,
                                     "bars": y_cols if chart_type == "bar" else None,
                                     "order": order,
                                     "orientation": orientation,
-                                    "colSpan": col_span
+                                    "colSpan": col_span,
+                                    "aggregations": {y: agg_funcs.get(y, 'sum') for y in y_cols}
                                 })
                         except Exception as e:
                             print(f"Error generando gráfico {title}: {e}")
@@ -353,7 +552,8 @@ class DataService:
                                 "message": f"Alerta: {len(matches)} registros tienen '{column}' {operator} {threshold}"
                             })
 
-            return dashboard_data
+            # Sanitize all data before returning to ensure JSON compatibility
+            return sanitize_for_json(dashboard_data)
 
         except Exception as e:
             raise ValueError(f"Error generando dashboard: {str(e)}")
