@@ -230,7 +230,7 @@ class InsightsService:
                 try:
                     pd.to_datetime(df[col], errors='raise')
                     date_cols.append(col)
-                except:
+                except (ValueError, TypeError):
                     pass
                 continue
             
@@ -240,7 +240,7 @@ class InsightsService:
                     converted = pd.to_datetime(df[col], errors='coerce')
                     if converted.notna().sum() / len(df) > 0.8:  # 80% convertible
                         date_cols.append(col)
-                except:
+                except (ValueError, TypeError):
                     pass
         
         return date_cols

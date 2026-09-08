@@ -95,7 +95,7 @@ class RecommendationsService:
                     pd.to_datetime(df[col].dropna().head(100), errors='raise')
                     analysis['date_columns'].append(col)
                     col_info['type'] = 'date'
-                except:
+                except (ValueError, TypeError):
                     pass
             
             # Detectar numéricos
@@ -234,7 +234,7 @@ class RecommendationsService:
                         'insight': f"Distribución variable de {y_col} por {x_col}",
                         'type': 'simple'
                     }
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 return None
         
         # 1. PRIORIDAD ALTA: Gráficos con agrupación que muestran comparativas
