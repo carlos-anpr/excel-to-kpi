@@ -73,17 +73,6 @@ En cualquier gráfico temporal, pulsa *Mostrar predicción* y la app proyecta lo
 
 ![Predicción de ventas](docs/screenshots/03-forecast.png)
 
-### Personaliza cada gráfico y ordénalo a tu gusto
-
-Cada tarjeta tiene su menú: cambia el tipo (barras, líneas, área, circular), la orientación y el tema de color. Y si quieres priorizar un gráfico, arrástralo a otra posición: el orden se guarda solo. La configuración se recuerda por gráfico y por dashboard.
-
-![Demo: cambio de color, tipo de gráfico y reordenación por arrastre](docs/screenshots/demo.gif)
-
-| | |
-|---|---|
-| ![Menú de configuración del gráfico](docs/screenshots/04-config-grafico.png) | ![Dashboard con gráficos personalizados](docs/screenshots/05-dashboard-personalizado.png) |
-| **Menú de cada gráfico** — tipo, orientación y tema de color. | **Cada gráfico con su estilo** — área, circular, barras horizontales... |
-
 ## Ponerlo en marcha (2 minutos)
 
 ```bash
