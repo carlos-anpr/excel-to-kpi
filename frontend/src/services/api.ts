@@ -139,3 +139,98 @@ export const getNextRecommendation = async (
   );
   return response.data;
 };
+
+// ============== FORECAST TYPES AND FUNCTIONS ==============
+
+export interface ForecastAnalysisResult {
+  chart_id: number;
+  title: string;
+  predictable_metrics: {
+    column: string;
+    confidence_level: 'high' | 'medium' | 'low';
+    r_squared: number;
+    trend: 'up' | 'down' | 'stable';
+    recommended_periods: number;
+    reason: string;
+  }[];
+}
+
+export interface ForecastDataPoint {
+  x: string;
+  y: number;
+  type: 'historical' | 'forecast';
+}
+
+export interface ForecastConfidencePoint {
+  x: string;
+  y: number;
+}
+
+export interface ForecastResult {
+  success: boolean;
+  error?: string;
+  method_used?: string;
+  original_data: ForecastDataPoint[];
+  forecast_data: ForecastDataPoint[];
+  confidence_interval: {
+    lower: ForecastConfidencePoint[];
+    upper: ForecastConfidencePoint[];
+  };
+  metrics?: {
+    r_squared: number;
+    trend: 'up' | 'down' | 'stable';
+    trend_value: number;
+    confidence: number;
+    periods_predicted: number;
+  };
+  analysis?: {
+    can_predict: boolean;
+    reason: string;
+    confidence_level: string;
+    r_squared: number;
+    data_points: number;
+    trend: string;
+    recommended_periods: number;
+  };
+}
+
+export interface ForecastAnalyzeResponse {
+  file_id: string;
+  charts_analysis: ForecastAnalysisResult[];
+}
+
+/**
+ * Analiza qué gráficos pueden tener predicción
+ */
+export const analyzeForecastAvailability = async (
+  fileId: string,
+  charts: any[]
+): Promise<ForecastAnalyzeResponse> => {
+  const response = await axios.post<ForecastAnalyzeResponse>(
+    `${API_URL}/files/${fileId}/forecast/analyze`,
+    { charts }
+  );
+  return response.data;
+};
+
+/**
+ * Genera predicción para un gráfico específico
+ */
+export const generateForecast = async (
+  fileId: string,
+  xColumn: string,
+  yColumn: string,
+  periods?: number,
+  method: 'auto' | 'linear' | 'holt_winters' | 'exponential' = 'auto'
+): Promise<ForecastResult> => {
+  const response = await axios.post<ForecastResult>(
+    `${API_URL}/files/${fileId}/forecast/generate`,
+    {
+      x_column: xColumn,
+      y_column: yColumn,
+      periods,
+      method
+    }
+  );
+  return response.data;
+};

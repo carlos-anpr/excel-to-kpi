@@ -3,10 +3,10 @@ from sqlmodel import Session, select
 from app.services.data_service import DataService
 from app.services.insights_service import InsightsService
 from app.services.recommendations_service import RecommendationsService
+from app.services.forecast_service import ForecastService
 from app.core.database import get_session
 from app.models.file_model import FileRecord
 from typing import Dict, List
-import os
 import pandas as pd
 
 router = APIRouter()
@@ -16,13 +16,17 @@ async def list_files(session: Session = Depends(get_session)):
     files = session.exec(select(FileRecord)).all()
     return files
 
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...), session: Session = Depends(get_session)):
     if not file.filename.lower().endswith(('.csv', '.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Formato de archivo no soportado. Use CSV o Excel.")
-    
+
     try:
         contents = await file.read()
+        if len(contents) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="El archivo excede el limite de 50 MB.")
         file_id = DataService.save_file(contents, file.filename)
         
         # Guardar registro inicial en BD
@@ -133,12 +137,7 @@ async def get_insights(file_id: str, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
     
     # Buscar el archivo físico
-    upload_dir = "uploads"
-    found_file = None
-    for f in os.listdir(upload_dir):
-        if f.startswith(file_id):
-            found_file = os.path.join(upload_dir, f)
-            break
+    found_file = DataService.find_file(file_id)
     
     if not found_file:
         raise HTTPException(status_code=404, detail="Archivo físico no encontrado")
@@ -168,12 +167,7 @@ async def get_recommendations(file_id: str, session: Session = Depends(get_sessi
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
     
     # Buscar el archivo físico
-    upload_dir = "uploads"
-    found_file = None
-    for f in os.listdir(upload_dir):
-        if f.startswith(file_id):
-            found_file = os.path.join(upload_dir, f)
-            break
+    found_file = DataService.find_file(file_id)
     
     if not found_file:
         raise HTTPException(status_code=404, detail="Archivo físico no encontrado")
@@ -204,12 +198,7 @@ async def get_next_recommendation(file_id: str, body: Dict, session: Session = D
     if not file_record:
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
     
-    upload_dir = "uploads"
-    found_file = None
-    for f in os.listdir(upload_dir):
-        if f.startswith(file_id):
-            found_file = os.path.join(upload_dir, f)
-            break
+    found_file = DataService.find_file(file_id)
     
     if not found_file:
         raise HTTPException(status_code=404, detail="Archivo físico no encontrado")
@@ -233,3 +222,89 @@ async def get_next_recommendation(file_id: str, body: Dict, session: Session = D
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error obteniendo recomendación: {str(e)}")
+
+
+# ============== FORECAST ENDPOINTS ==============
+
+@router.post("/files/{file_id}/forecast/analyze")
+async def analyze_forecast_availability(file_id: str, body: Dict, session: Session = Depends(get_session)):
+    """
+    Analiza qué gráficos pueden tener predicción.
+    Body: { "charts": [...] } - Lista de configuraciones de gráficos
+    """
+    file_record = session.get(FileRecord, file_id)
+    if not file_record:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    
+    found_file = DataService.find_file(file_id)
+    
+    if not found_file:
+        raise HTTPException(status_code=404, detail="Archivo físico no encontrado")
+    
+    try:
+        df = DataService._load_dataframe(found_file)
+        charts_config = body.get("charts", [])
+        
+        results = ForecastService.get_predictable_charts(df, charts_config)
+        
+        return {
+            "file_id": file_id,
+            "charts_analysis": results
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error analizando predicción: {str(e)}")
+
+
+@router.post("/files/{file_id}/forecast/generate")
+async def generate_forecast(file_id: str, body: Dict, session: Session = Depends(get_session)):
+    """
+    Genera predicción para un gráfico específico.
+    Body: {
+        "x_column": str,       # Columna del eje X
+        "y_column": str,       # Columna del eje Y  
+        "periods": int,        # Períodos a predecir (opcional)
+        "method": str          # "auto", "linear", "holt_winters", "exponential" (opcional)
+    }
+    """
+    file_record = session.get(FileRecord, file_id)
+    if not file_record:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    
+    found_file = DataService.find_file(file_id)
+    
+    if not found_file:
+        raise HTTPException(status_code=404, detail="Archivo físico no encontrado")
+    
+    try:
+        df = DataService._load_dataframe(found_file)
+        
+        x_col = body.get("x_column")
+        y_col = body.get("y_column")
+        periods = body.get("periods")
+        method = body.get("method", "auto")
+        
+        if not x_col or not y_col:
+            raise HTTPException(status_code=400, detail="Se requieren x_column y y_column")
+        
+        # Primero analizar si es predecible
+        analysis = ForecastService.analyze_predictability(df, x_col, y_col)
+        
+        if not analysis["can_predict"]:
+            return {
+                "success": False,
+                "error": analysis["reason"],
+                "analysis": analysis
+            }
+        
+        # Generar predicción
+        result = ForecastService.generate_forecast(
+            df, x_col, y_col, 
+            periods=periods or analysis["recommended_periods"],
+            method=method
+        )
+        
+        result["analysis"] = analysis
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando predicción: {str(e)}")

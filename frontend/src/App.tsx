@@ -73,14 +73,10 @@ function App() {
   };
 
   const handleMappingChange = useCallback(async (config: any) => {
-    console.log('[App] handleMappingChange called with:', JSON.stringify(config, null, 2));
     if (!currentFileId) return;
     setCurrentConfig(config);
     try {
-      // Debounce could be added here if needed, but for now direct call
-      console.log('[App] Calling getDashboardPreview...');
       const previewData = await getDashboardPreview(currentFileId, config);
-      console.log('[App] Preview data received');
       setDashboardData(previewData);
     } catch (err) {
       console.error("Error updating preview", err);

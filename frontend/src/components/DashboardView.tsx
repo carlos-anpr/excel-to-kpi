@@ -12,6 +12,7 @@ interface DashboardData {
     type: string;
     title: string;
     xAxis: string;
+    yAxis?: string[];  // Para predicción
     data: any[];
     lines?: string[];
     bars?: string[];

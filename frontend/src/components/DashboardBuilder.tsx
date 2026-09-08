@@ -366,7 +366,6 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns: raw
           aggregations: c.aggregations || {}
         }))
       };
-      console.log('[DashboardBuilder] onChange triggered, config:', JSON.stringify(config, null, 2));
       onChange(config);
     }
   }, [kpis, charts, onChange]);
@@ -454,12 +453,10 @@ export const DashboardBuilder: React.FC<DashboardBuilderProps> = ({ columns: raw
   };
   
   const updateKpiAggregation = (col: string, aggregation: AggregationType) => {
-    console.log('[DashboardBuilder] updateKpiAggregation:', col, aggregation);
     setKpis(kpis.map(k => k.column === col ? { ...k, aggregation } : k));
   };
   
   const updateChartAggregation = (chartId: number, col: string, aggregation: AggregationType) => {
-    console.log('[DashboardBuilder] updateChartAggregation:', chartId, col, aggregation);
     setCharts(charts.map(chart => {
       if (chart.id !== chartId) return chart;
       return { ...chart, aggregations: { ...chart.aggregations, [col]: aggregation } };
