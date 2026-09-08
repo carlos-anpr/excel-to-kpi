@@ -65,10 +65,7 @@ La IA analiza tus columnas (fechas, numéricas, categóricas) y te propone los g
 
 La app detecta por sí sola qué está pasando en tus datos: resúmenes de métricas, tendencias al alza o la baja, líderes por categoría, mejores y peores períodos. Todo priorizado por importancia y exportable a PDF.
 
-| | |
-|---|---|
-| ![Panel de insights](docs/screenshots/06-insights.png) | ![Reporte completo de insights](docs/screenshots/14-insights-reporte.png) |
-| **Panel de insights** — hallazgos clasificados y cuantificados. | **Reporte ejecutivo** — tabla completa con prioridades, exportable. |
+![Panel de insights con hallazgos clasificados](docs/screenshots/06-insights.png)
 
 ### Predicciones de futuro
 
@@ -76,14 +73,16 @@ En cualquier gráfico temporal, pulsa *Mostrar predicción* y la app proyecta lo
 
 ![Predicción de ventas](docs/screenshots/03-forecast.png)
 
-### Personaliza cada gráfico
+### Personaliza cada gráfico y ordénalo a tu gusto
 
-Cada tarjeta tiene su menú: cambia el tipo (barras, líneas, área, circular), la orientación y el tema de color. La configuración se recuerda por gráfico y por dashboard.
+Cada tarjeta tiene su menú: cambia el tipo (barras, líneas, área, circular), la orientación y el tema de color. Y si quieres priorizar un gráfico, arrástralo a otra posición: el orden se guarda solo. La configuración se recuerda por gráfico y por dashboard.
+
+![Demo: cambio de color, tipo de gráfico y reordenación por arrastre](docs/screenshots/demo.gif)
 
 | | |
 |---|---|
-| ![Menú de configuración del gráfico](docs/screenshots/04-config-grafico.png) | ![Dashboard con gráfico personalizado](docs/screenshots/05-dashboard-personalizado.png) |
-| **Menú de cada gráfico** — tipo, orientación y tema de color. | **Resultado al instante** — área multicolor en el mismo dashboard. |
+| ![Menú de configuración del gráfico](docs/screenshots/04-config-grafico.png) | ![Dashboard con gráficos personalizados](docs/screenshots/05-dashboard-personalizado.png) |
+| **Menú de cada gráfico** — tipo, orientación y tema de color. | **Cada gráfico con su estilo** — área, circular, barras horizontales... |
 
 ## Ponerlo en marcha (2 minutos)
 
